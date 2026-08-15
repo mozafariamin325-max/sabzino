@@ -34,3 +34,33 @@ class PlatformSetting(TimeStampedModel):
 
     def __str__(self):
         return f"{self.key}={self.value}"
+
+
+class RatingContext(models.TextChoices):
+    COLLECTION = "COLLECTION", "جمع‌آوری (شهروند ↔ جمع‌آور)"
+    ORDER = "ORDER", "سفارش بازارگاه (خریدار ↔ فروشنده)"
+    STATION = "STATION", "تحویل به ایستگاه (شهروند ↔ ایستگاه)"
+
+
+class Rating(TimeStampedModel, UUIDModel):
+    """
+    Two-way post-transaction rating (spec section 79): Citizen↔Collector,
+    Buyer↔Seller, Factory↔Seller, Station↔User. `reference` is the
+    human-readable code of the underlying object (CollectionRequest.code /
+    Order.code / StationTransaction.transaction_code) rather than a generic FK,
+    so this stays simple and works the same for every context.
+    """
+
+    from_user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="ratings_given")
+    to_user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="ratings_received")
+    context_type = models.CharField(max_length=16, choices=RatingContext.choices)
+    reference = models.CharField(max_length=32, help_text="کد درخواست/سفارش/تراکنش مربوطه")
+    score = models.PositiveSmallIntegerField(help_text="۱ تا ۵")
+    comment = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        unique_together = ("from_user", "context_type", "reference")
+
+    def __str__(self):
+        return f"{self.from_user} -> {self.to_user}: {self.score}/5 ({self.context_type})"

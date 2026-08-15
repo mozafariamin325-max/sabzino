@@ -20,9 +20,9 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   REJECTED: { text: "رد شده", cls: "bg-red-50 text-red-600 border-red-200" },
 };
 
-export default function BusinessDashboard() {
-  const { kind = "" } = useParams();
-  const kindKey = kind.toUpperCase();
+export default function BusinessDashboard({ kind: kindProp }: { kind?: string } = {}) {
+  const params = useParams();
+  const kindKey = (kindProp || params.kind || "").toUpperCase();
   const meta = KIND_LABELS[kindKey];
 
   const { data: profile, isLoading: profileLoading } = useMyOrgProfile(kindKey);

@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/auth";
-import { useGreenPoints, useProfileChangeRequests, useUpdateMe } from "../api/queries";
+import { useGreenPoints, useProfileChangeRequests, useQRCode, useUpdateMe } from "../api/queries";
 import { Button, Card, TopBar } from "../components/ui";
+import RoleSwitcher from "../components/RoleSwitcher";
+import { getAvailableViews } from "../lib/roles";
 
 export default function Profile() {
   const user = useAuthStore((s) => s.user);
@@ -19,6 +21,9 @@ export default function Profile() {
 
   const roles = user?.roles?.map((r) => r.role) || [];
   const myPending = (pendingChanges || []).filter((c) => c.status === "PENDING");
+  const availableViews = getAvailableViews(user);
+  const [showQr, setShowQr] = useState(false);
+  const { data: qr, isLoading: qrLoading } = useQRCode(showQr ? user?.uid : undefined);
 
   async function saveEdits() {
     await updateMe.mutateAsync(form);
@@ -85,6 +90,14 @@ export default function Profile() {
           </Card>
         )}
 
+        {availableViews.length > 1 && (
+          <Card className="p-4 mt-3">
+            <p className="text-sm font-bold text-ink-900 mb-1">نمای پیش‌فرض داشبورد</p>
+            <p className="text-[11px] text-ink-500 mb-1">هر وقت وارد سبزینو می‌شوید، همین نما اول باز می‌شود. هر زمان خواستید از همین‌جا عوضش کنید.</p>
+            <RoleSwitcher compact />
+          </Card>
+        )}
+
         <Card className="p-4 mt-3 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">کد دعوت شما</p>
@@ -93,6 +106,28 @@ export default function Profile() {
           <span className="font-mono text-sm font-bold text-brand-600 bg-brand-50 px-3 py-1.5 rounded-lg">
             {user?.referral_code}
           </span>
+        </Card>
+
+        <Card className="p-4 mt-3">
+          <button
+            className="w-full flex items-center justify-between"
+            onClick={() => setShowQr((v) => !v)}
+          >
+            <div className="text-right">
+              <p className="text-sm font-medium">کد QR شناسایی من</p>
+              <p className="text-[11px] text-ink-500 mt-0.5">برای شناسایی سریع در ایستگاه‌ها و تراکنش‌ها</p>
+            </div>
+            <span className="text-ink-300">{showQr ? "▲" : "▼"}</span>
+          </button>
+          {showQr && (
+            <div className="flex flex-col items-center mt-3">
+              {qrLoading ? (
+                <p className="text-xs text-ink-400 py-4">در حال ساخت QR...</p>
+              ) : qr ? (
+                <img src={qr} alt="QR کاربر" className="w-36 h-36 rounded-lg border border-brand-100" />
+              ) : null}
+            </div>
+          )}
         </Card>
 
         <div className="mt-5 flex flex-col gap-2">

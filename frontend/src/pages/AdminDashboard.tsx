@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import { api } from "../api/client";
 import { useAuthStore } from "../store/auth";
-import { useAdminCharts, useDecideVerification, useVerificationCenter } from "../api/queries";
+import { downloadAdminExport, useAdminCharts, useDecideVerification, useGlobalSearch, useVerificationCenter } from "../api/queries";
 import { Button, Card, CenterLoading, DemoBadge, EmptyState, TopBar } from "../components/ui";
 import { formatKg, formatNumber, formatToman } from "../lib/format";
 
@@ -22,7 +22,7 @@ function jalaliDay(iso: string) {
 export default function AdminDashboard() {
   const user = useAuthStore((s) => s.user);
   const isStaff = user?.is_staff;
-  const [tab, setTab] = useState<"overview" | "verification" | "charts">("overview");
+  const [tab, setTab] = useState<"overview" | "verification" | "charts" | "tools">("overview");
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-dashboard"],
@@ -69,6 +69,7 @@ export default function AdminDashboard() {
             ["overview", "نمای کلی"],
             ["verification", `تأیید ثبت‌نام‌ها${data.pending_verifications ? ` (${data.pending_verifications})` : ""}`],
             ["charts", "نمودارها"],
+            ["tools", "جستجو و خروجی"],
           ] as const).map(([key, label]) => (
             <button
               key={key}
@@ -101,7 +102,101 @@ export default function AdminDashboard() {
 
         {isStaff && tab === "verification" && <VerificationTab />}
         {isStaff && tab === "charts" && <ChartsTab />}
+        {isStaff && tab === "tools" && <ToolsTab />}
       </div>
+    </div>
+  );
+}
+
+function ToolsTab() {
+  const [q, setQ] = useState("");
+  const { data, isLoading } = useGlobalSearch(q);
+  const [exporting, setExporting] = useState<"collections" | "orders" | null>(null);
+
+  async function handleExport(type: "collections" | "orders") {
+    setExporting(type);
+    try {
+      await downloadAdminExport(type);
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4 pb-6">
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-2">جستجوی سراسری</p>
+        <input
+          className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-sm"
+          placeholder="نام، شماره موبایل، کد درخواست یا کد سفارش..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        {isLoading && q.trim().length > 1 && <p className="text-xs text-ink-400 mt-3">در حال جستجو...</p>}
+
+        {data && (data.users.length + data.requests.length + data.orders.length === 0) && q.trim().length > 1 && (
+          <p className="text-xs text-ink-400 mt-3">نتیجه‌ای یافت نشد.</p>
+        )}
+
+        {data && data.users.length > 0 && (
+          <div className="mt-3">
+            <p className="text-[11px] font-bold text-ink-500 mb-1.5">کاربران</p>
+            {data.users.map((u) => (
+              <div key={u.id} className="text-xs py-1.5 border-t border-brand-50 flex justify-between">
+                <span>{u.name}</span>
+                <span className="text-ink-400" dir="ltr">{u.phone || u.email}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {data && data.requests.length > 0 && (
+          <div className="mt-3">
+            <p className="text-[11px] font-bold text-ink-500 mb-1.5">درخواست‌های جمع‌آوری</p>
+            {data.requests.map((r) => (
+              <div key={r.uid} className="text-xs py-1.5 border-t border-brand-50 flex justify-between">
+                <span>{r.code} — {r.citizen}</span>
+                <span className="text-ink-400">{r.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {data && data.orders.length > 0 && (
+          <div className="mt-3">
+            <p className="text-[11px] font-bold text-ink-500 mb-1.5">سفارش‌های بازارگاه</p>
+            {data.orders.map((o) => (
+              <div key={o.uid} className="text-xs py-1.5 border-t border-brand-50 flex justify-between">
+                <span>{o.code} — {o.buyer} ← {o.seller}</span>
+                <span className="text-ink-400">{formatToman(o.total)} ت</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-2">خروجی CSV</p>
+        <p className="text-[11px] text-ink-500 mb-3">خروجی برای بازکردن در اکسل (حداکثر ۵۰۰۰ ردیف اخیر).</p>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            className="flex-1"
+            loading={exporting === "collections"}
+            onClick={() => handleExport("collections")}
+          >
+            درخواست‌های جمع‌آوری
+          </Button>
+          <Button
+            variant="secondary"
+            className="flex-1"
+            loading={exporting === "orders"}
+            onClick={() => handleExport("orders")}
+          >
+            سفارش‌های بازارگاه
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }

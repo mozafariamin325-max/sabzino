@@ -5,7 +5,7 @@ import type {
   Address, CollectionRequest, GreenPoints, Listing, MaterialCategory,
   Paginated, RecyclingStation, Wallet, WalletTransaction, OrganizationDetail,
   ProfileChangeRequest, RecurringSchedule, OrgProfile, InventoryMovement, StockRow,
-  VerificationItem,
+  VerificationItem, Rating, GlobalSearchResult,
 } from "./types";
 
 // ---------------- AUTH ----------------
@@ -420,6 +420,73 @@ export function useListings(params?: Record<string, string>) {
     queryKey: ["listings", params],
     queryFn: async () => (await api.get<Paginated<Listing>>("/marketplace/listings/", { params })).data.results,
   });
+}
+
+// ---------------- RATINGS ----------------
+export function useRatingsFor(toUser?: number) {
+  return useQuery({
+    queryKey: ["ratings", "for", toUser],
+    queryFn: async () => (await api.get<Paginated<Rating> | Rating[]>("/ratings/", { params: { to_user: toUser } })).data,
+    enabled: !!toUser,
+    select: (data) => (Array.isArray(data) ? data : data.results),
+  });
+}
+
+export function useMyGivenRatings() {
+  return useQuery({
+    queryKey: ["ratings", "given"],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<Rating> | Rating[]>("/ratings/", { params: { mine: "given" } });
+      return Array.isArray(data) ? data : data.results;
+    },
+  });
+}
+
+export function useCreateRating() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      to_user: number; context_type: "COLLECTION" | "ORDER" | "STATION"; reference: string; score: number; comment?: string;
+    }) => {
+      const { data } = await api.post("/ratings/", payload);
+      if (data?.success === false) throw new Error(data.message || "خطا در ثبت امتیاز");
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ratings"] });
+    },
+  });
+}
+
+// ---------------- QR CODE ----------------
+export function useQRCode(value?: string) {
+  return useQuery({
+    queryKey: ["qr", value],
+    queryFn: async () => (await api.get<{ success: boolean; qr: string }>("/qr/", { params: { value } })).data.qr,
+    enabled: !!value,
+    staleTime: 5 * 60_000,
+  });
+}
+
+// ---------------- ADMIN: GLOBAL SEARCH + EXPORT ----------------
+export function useGlobalSearch(q: string) {
+  return useQuery({
+    queryKey: ["global-search", q],
+    queryFn: async () => (await api.get<GlobalSearchResult>("/search/", { params: { q } })).data,
+    enabled: q.trim().length > 1,
+  });
+}
+
+export async function downloadAdminExport(type: "collections" | "orders") {
+  const res = await api.get(`/export/`, { params: { type }, responseType: "blob" });
+  const blobUrl = URL.createObjectURL(res.data as Blob);
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = `sabzino-${type}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(blobUrl);
 }
 
 // ---------------- NOTIFICATIONS ----------------

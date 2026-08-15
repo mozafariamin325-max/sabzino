@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useCancelRequest, useRequestDetail } from "../api/queries";
+import {
+  useCancelRequest, useCreateRating, useMyGivenRatings, useQRCode, useRequestDetail,
+} from "../api/queries";
 import { Button, Card, CenterLoading, StatusPill, TopBar } from "../components/ui";
 import { STATUS_LABELS } from "../api/types";
 import { formatKg, formatToman, toJalaliTime } from "../lib/format";
@@ -76,6 +79,12 @@ export default function RequestDetail() {
           <p className="text-sm">{toJalaliTime(req.created_at)}</p>
         </Card>
 
+        {req.status === "COMPLETED" && <DigitalReceipt code={req.code} uid={req.uid} />}
+
+        {req.status === "COMPLETED" && req.assignment && (
+          <CollectorRating requestUid={req.uid} collectorId={req.assignment.collector} collectorName={req.assignment.collector_name} />
+        )}
+
         {req.weighing ? (
           <Card className="p-4 bg-brand-50 border border-brand-100">
             <p className="text-xs font-bold text-brand-700 mb-2">رسید نهایی وزن‌کشی</p>
@@ -116,5 +125,81 @@ export default function RequestDetail() {
         )}
       </div>
     </div>
+  );
+}
+
+function DigitalReceipt({ code, uid }: { code: string; uid: string }) {
+  const { data: qr, isLoading } = useQRCode(uid);
+  return (
+    <Card className="p-4 flex flex-col items-center text-center">
+      <p className="text-xs font-bold text-ink-700 mb-2">رسید دیجیتال</p>
+      {isLoading ? (
+        <CenterLoading />
+      ) : qr ? (
+        <img src={qr} alt="QR رسید" className="w-32 h-32 rounded-lg border border-brand-100" />
+      ) : null}
+      <p className="text-[11px] text-ink-500 mt-2">کد پیگیری: {code}</p>
+    </Card>
+  );
+}
+
+function CollectorRating({
+  requestUid, collectorId, collectorName,
+}: {
+  requestUid: string;
+  collectorId: number;
+  collectorName: string;
+}) {
+  const { data: given } = useMyGivenRatings();
+  const createRating = useCreateRating();
+  const [score, setScore] = useState(5);
+  const [comment, setComment] = useState("");
+
+  const existing = (given || []).find((r) => r.reference === requestUid && r.context_type === "COLLECTION");
+
+  if (existing) {
+    return (
+      <Card className="p-4">
+        <p className="text-xs font-bold text-ink-700 mb-1">امتیاز شما به جمع‌آور</p>
+        <p className="text-sm">{"⭐".repeat(existing.score)} <span className="text-ink-400">({existing.score} از ۵)</span></p>
+        {existing.comment && <p className="text-xs text-ink-500 mt-1">{existing.comment}</p>}
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-4">
+      <p className="text-xs font-bold text-ink-700 mb-2">به {collectorName || "جمع‌آور"} امتیاز بدهید</p>
+      <div className="flex gap-1 mb-2 justify-center" dir="ltr">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} type="button" onClick={() => setScore(n)} className="text-2xl leading-none">
+            {n <= score ? "⭐" : "☆"}
+          </button>
+        ))}
+      </div>
+      <textarea
+        className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-sm mb-2"
+        placeholder="نظر شما (اختیاری)"
+        rows={2}
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+      />
+      {createRating.error && <p className="text-red-600 text-xs mb-2">{(createRating.error as Error).message}</p>}
+      <Button
+        full
+        loading={createRating.isPending}
+        onClick={() =>
+          createRating.mutate({
+            to_user: collectorId,
+            context_type: "COLLECTION",
+            reference: requestUid,
+            score,
+            comment,
+          })
+        }
+      >
+        ثبت امتیاز
+      </Button>
+    </Card>
   );
 }

@@ -6,7 +6,7 @@ import { CenterLoading } from "./components/ui";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import Home from "./pages/Home";
+import Dashboard from "./pages/Dashboard";
 import RequestWizard from "./pages/RequestWizard";
 import RequestsList from "./pages/RequestsList";
 import RequestDetail from "./pages/RequestDetail";
@@ -51,7 +51,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
-      <Route path="/" element={<RequireAuth><AppLayout><Home /></AppLayout></RequireAuth>} />
+      <Route path="/" element={<RequireAuth><AppLayout><Dashboard /></AppLayout></RequireAuth>} />
       <Route path="/requests/new" element={<RequireAuth><AppLayout><RequestWizard /></AppLayout></RequireAuth>} />
       <Route path="/requests" element={<RequireAuth><AppLayout><RequestsList /></AppLayout></RequireAuth>} />
       <Route path="/requests/:uid" element={<RequireAuth><AppLayout><RequestDetail /></AppLayout></RequireAuth>} />

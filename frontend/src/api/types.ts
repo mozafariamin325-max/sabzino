@@ -279,6 +279,49 @@ export const AMOUNT_RANGES: { value: string; label: string }[] = [
   { value: "OVER_100", label: "بیشتر از ۱۰۰ کیلو" },
 ];
 
+export interface Rating {
+  uid: string;
+  from_user_name: string;
+  to_user: number;
+  context_type: "COLLECTION" | "ORDER" | "STATION";
+  context_type_display: string;
+  reference: string;
+  score: number;
+  comment: string;
+  created_at: string;
+}
+
+export interface SearchUserResult {
+  id: number;
+  uid: string;
+  name: string;
+  phone: string | null;
+  email: string;
+}
+
+export interface SearchRequestResult {
+  uid: string;
+  code: string;
+  citizen: string;
+  status: string;
+}
+
+export interface SearchOrderResult {
+  uid: string;
+  code: string;
+  buyer: string;
+  seller: string;
+  status: string;
+  total: string;
+}
+
+export interface GlobalSearchResult {
+  success: boolean;
+  users: SearchUserResult[];
+  requests: SearchRequestResult[];
+  orders: SearchOrderResult[];
+}
+
 export const STATUS_LABELS: Record<string, string> = {
   REQUESTED: "ثبت شده",
   SEARCHING_COLLECTOR: "در جستجوی جمع‌آور",

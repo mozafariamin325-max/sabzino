@@ -23,8 +23,11 @@ interface AuthState {
   accessToken: string | null;
   refreshToken: string | null;
   user: SabzinoUser | null;
+  /** Which dashboard the "/" route renders — a user with several roles (e.g. citizen + collector) can switch. */
+  activeView: string;
   setAuth: (tokens: { access: string; refresh: string }, user: SabzinoUser) => void;
   setUser: (user: SabzinoUser) => void;
+  setActiveView: (view: string) => void;
   logout: () => void;
   hasRole: (role: Role) => boolean;
 }
@@ -34,22 +37,23 @@ const STORAGE_KEY = "sabzino_auth_v1";
 function loadInitial() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { accessToken: null, refreshToken: null, user: null };
-    return JSON.parse(raw);
+    if (!raw) return { accessToken: null, refreshToken: null, user: null, activeView: "CITIZEN" };
+    const parsed = JSON.parse(raw);
+    return { activeView: "CITIZEN", ...parsed };
   } catch {
-    return { accessToken: null, refreshToken: null, user: null };
+    return { accessToken: null, refreshToken: null, user: null, activeView: "CITIZEN" };
   }
 }
 
 function persist(state: Partial<AuthState>) {
-  const { accessToken, refreshToken, user } = state;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ accessToken, refreshToken, user }));
+  const { accessToken, refreshToken, user, activeView } = state;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ accessToken, refreshToken, user, activeView }));
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   ...loadInitial(),
   setAuth: (tokens, user) => {
-    const next = { accessToken: tokens.access, refreshToken: tokens.refresh, user };
+    const next = { accessToken: tokens.access, refreshToken: tokens.refresh, user, activeView: "CITIZEN" };
     persist(next);
     set(next);
   },
@@ -57,9 +61,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user });
     persist({ ...get(), user });
   },
+  setActiveView: (view) => {
+    set({ activeView: view });
+    persist({ ...get(), activeView: view });
+  },
   logout: () => {
     localStorage.removeItem(STORAGE_KEY);
-    set({ accessToken: null, refreshToken: null, user: null });
+    set({ accessToken: null, refreshToken: null, user: null, activeView: "CITIZEN" });
   },
   hasRole: (role) => !!get().user?.roles?.some((r) => r.role === role),
 }));
