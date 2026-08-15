@@ -1,0 +1,69 @@
+@import "tailwindcss";
+@import "@fontsource-variable/vazirmatn";
+
+@theme {
+  --font-sans: "Vazirmatn Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-50: #eafff2;
+  --color-brand-100: #cffde3;
+  --color-brand-200: #9df8c8;
+  --color-brand-300: #63eba8;
+  --color-brand-400: #2fd488;
+  --color-brand-500: #16a34a;
+  --color-brand-600: #0f7a3d;
+  --color-brand-700: #0c5f32;
+  --color-brand-800: #0a4a29;
+  --color-brand-900: #073d22;
+
+  --color-ink-900: #12201a;
+  --color-ink-700: #33463c;
+  --color-ink-500: #64766c;
+  --color-ink-300: #a4b3ab;
+}
+
+html {
+  direction: rtl;
+}
+
+body {
+  margin: 0;
+  background: #f4faf6;
+  color: var(--color-ink-900);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cfe6d8;
+  border-radius: 999px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out both;
+}

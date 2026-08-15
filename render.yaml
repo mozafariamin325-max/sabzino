@@ -1,0 +1,23 @@
+# Render Blueprint — یک‌کلیکی برای دیپلوی بک‌اند سبزینو
+# استفاده: در Render روی "New +" -> "Blueprint" بزن و این ریپازیتوری را انتخاب کن.
+# دیتابیس را در این Blueprint نساخته‌ایم چون Postgres رایگان خود Render بعد از ۳۰ روز
+# منقضی می‌شود؛ به‌جایش از یک Postgres رایگان و دائمی مثل Neon استفاده کن (راهنما در README).
+services:
+  - type: web
+    name: sabzino-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health/
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: "*"
+      - key: CORS_ALLOW_ALL
+        value: "True"
+      - key: DATABASE_URL
+        sync: false
