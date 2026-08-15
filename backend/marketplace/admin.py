@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import RecyclingCenter, Factory, Wholesaler, Business, Listing, ListingImage, PurchaseRequest, Offer
+from .models import (
+    RecyclingCenter, Factory, Wholesaler, Business, Listing, ListingImage, PurchaseRequest, Offer,
+    InventoryMovement,
+)
 
 
 @admin.register(RecyclingCenter)
@@ -42,6 +45,13 @@ class ListingAdmin(admin.ModelAdmin):
 class PurchaseRequestAdmin(admin.ModelAdmin):
     list_display = ("material", "buyer", "quantity_kg", "status")
     list_filter = ("status", "material")
+
+
+@admin.register(InventoryMovement)
+class InventoryMovementAdmin(admin.ModelAdmin):
+    list_display = ("owner", "material", "direction", "weight_kg", "total_value", "created_at")
+    list_filter = ("direction", "material")
+    search_fields = ("owner__username", "counterparty_name")
 
 
 admin.site.register(Offer)

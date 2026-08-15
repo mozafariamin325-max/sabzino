@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import timedelta
 from math import radians, sin, cos, sqrt, atan2
 from django.db import transaction
 from django.utils import timezone
@@ -18,6 +19,15 @@ def estimate_value(materials_qs, amount_range: str) -> Decimal:
     avg_price = sum(prices) / len(prices)
     kg = AMOUNT_RANGE_MIDPOINT.get(amount_range, Decimal("5"))
     return (avg_price * kg).quantize(Decimal("1"))
+
+
+def estimate_value_for_items(items) -> Decimal:
+    """items: iterable of (material, weight_kg) — used by the multi-material wizard."""
+    total = Decimal("0")
+    for material, weight_kg in items:
+        price = material.current_price or Decimal("0")
+        total += price * Decimal(str(weight_kg))
+    return total.quantize(Decimal("1"))
 
 
 def log_status(request: CollectionRequest, status: str, note: str = "", changed_by=None):
@@ -94,3 +104,64 @@ def complete_weighing(request_obj: CollectionRequest, material, weight_kg: Decim
 
     log_status(request_obj, RequestStatus.COMPLETED, note="وزن‌کشی و تسویه انجام شد", changed_by=weighed_by)
     return record
+
+
+def _advance_next_run_date(schedule, today):
+    from .models import RecurrenceFrequency
+
+    if schedule.frequency == RecurrenceFrequency.WEEKLY:
+        return today + timedelta(days=7)
+    if schedule.frequency == RecurrenceFrequency.BIWEEKLY:
+        return today + timedelta(days=14)
+    # MONTHLY: jump ~1 month, clamped to a valid day
+    year = today.year + (1 if today.month == 12 else 0)
+    month = 1 if today.month == 12 else today.month + 1
+    day = min(schedule.day_of_month or today.day, 28)
+    from datetime import date
+
+    return date(year, month, day)
+
+
+@transaction.atomic
+def generate_due_recurring_requests(today=None):
+    """
+    Run daily (management command generate_recurring_requests, wired to a free
+    PythonAnywhere scheduled task). Creates a real CollectionRequest + items
+    for every active RecurringSchedule whose next_run_date has arrived, then
+    advances the schedule (spec ask: جمع‌آوری هفتگی/ماهانه خودکار).
+    """
+    from datetime import datetime, time
+    from .models import RecurringSchedule, CollectionRequestItem
+
+    today = today or timezone.localdate()
+    due = RecurringSchedule.objects.filter(is_active=True, next_run_date__lte=today).select_related("citizen", "address")
+    created = []
+    for schedule in due:
+        materials = list(schedule.materials.all())
+        if not materials:
+            schedule.next_run_date = _advance_next_run_date(schedule, today)
+            schedule.save(update_fields=["next_run_date", "updated_at"])
+            continue
+        preferred_dt = timezone.make_aware(datetime.combine(today, time(hour=schedule.preferred_hour or 9)))
+        req = CollectionRequest.objects.create(
+            citizen=schedule.citizen,
+            address=schedule.address,
+            address_text_snapshot=schedule.address.full_address,
+            lat=schedule.address.lat,
+            lng=schedule.address.lng,
+            preferred_time=preferred_dt,
+            description="ایجاد خودکار از جمع‌آوری دوره‌ای",
+        )
+        req.materials.set(materials)
+        default_weight = Decimal("5")
+        for m in materials:
+            CollectionRequestItem.objects.create(request=req, material=m, weight_kg=default_weight, is_exact=False)
+        req.estimated_value = estimate_value_for_items([(m, default_weight) for m in materials])
+        req.save(update_fields=["estimated_value"])
+        log_status(req, RequestStatus.SEARCHING_COLLECTOR, note="درخواست دوره‌ای خودکار", changed_by=schedule.citizen)
+
+        schedule.last_generated_request = req
+        schedule.next_run_date = _advance_next_run_date(schedule, today)
+        schedule.save(update_fields=["last_generated_request", "next_run_date", "updated_at"])
+        created.append(req)
+    return created

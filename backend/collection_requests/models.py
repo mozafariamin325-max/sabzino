@@ -76,6 +76,60 @@ class CollectionStatusLog(TimeStampedModel):
         ordering = ["created_at"]
 
 
+class CollectionRequestItem(TimeStampedModel):
+    """
+    One material line inside a request (spec ask: چند نوع زباله در یک سفارش).
+    weight_kg is always a number: either dragged on the weight slider (rough
+    estimate) or typed exactly by the citizen when is_exact=True.
+    """
+
+    request = models.ForeignKey(CollectionRequest, on_delete=models.CASCADE, related_name="items")
+    material = models.ForeignKey("materials.Material", on_delete=models.PROTECT, related_name="request_items")
+    weight_kg = models.DecimalField(max_digits=8, decimal_places=2, help_text="وزن تقریبی (اهرم) یا دقیق کیلوگرم")
+    is_exact = models.BooleanField(default=False, help_text="کاربر وزن را دقیق وارد کرده یا فقط اهرم را جابه‌جا کرده")
+
+    class Meta:
+        unique_together = ("request", "material")
+
+    def __str__(self):
+        return f"{self.request.code}: {self.material} x {self.weight_kg}kg"
+
+
+class RecurrenceFrequency(models.TextChoices):
+    WEEKLY = "WEEKLY", "هفتگی"
+    BIWEEKLY = "BIWEEKLY", "دو هفته یک‌بار"
+    MONTHLY = "MONTHLY", "ماهانه"
+
+
+class RecurringSchedule(TimeStampedModel, UUIDModel):
+    """
+    Citizen sets a recurring pickup (spec ask: هفتگی/ماهانه). A daily
+    management command (generate_recurring_requests) turns due schedules into
+    real CollectionRequest rows — see collection_requests/services.py.
+    """
+
+    citizen = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="recurring_schedules")
+    address = models.ForeignKey("accounts.Address", on_delete=models.CASCADE, related_name="recurring_schedules")
+    materials = models.ManyToManyField("materials.Material", related_name="recurring_schedules")
+    frequency = models.CharField(max_length=12, choices=RecurrenceFrequency.choices)
+    day_of_week = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="۰=شنبه ... ۶=جمعه، برای هفتگی/دوهفته‌یک‌بار"
+    )
+    day_of_month = models.PositiveSmallIntegerField(null=True, blank=True, help_text="برای ماهانه، ۱ تا ۲۸")
+    preferred_hour = models.PositiveSmallIntegerField(default=9)
+    is_active = models.BooleanField(default=True)
+    next_run_date = models.DateField()
+    last_generated_request = models.ForeignKey(
+        CollectionRequest, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+
+    class Meta:
+        ordering = ["next_run_date"]
+
+    def __str__(self):
+        return f"دوره‌ای {self.get_frequency_display()} - {self.citizen}"
+
+
 class WeighingRecord(TimeStampedModel, UUIDModel):
     """
     Final weigh-in for a collection request. Snapshots price at time of trade

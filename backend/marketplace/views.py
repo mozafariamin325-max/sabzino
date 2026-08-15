@@ -1,11 +1,12 @@
 from decimal import Decimal, InvalidOperation
 from rest_framework import viewsets, views, permissions, generics
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Q
-from .models import RecyclingCenter, Factory, Wholesaler, Business, Listing, PurchaseRequest, Offer
+from django.db.models import Q, Sum, Case, When, F, DecimalField
+from .models import RecyclingCenter, Factory, Wholesaler, Business, Listing, PurchaseRequest, Offer, InventoryMovement
 from .serializers import (
     RecyclingCenterSerializer, FactorySerializer, WholesalerSerializer, BusinessSerializer,
-    ListingSerializer, PurchaseRequestSerializer, OfferSerializer,
+    ListingSerializer, PurchaseRequestSerializer, OfferSerializer, InventoryMovementSerializer,
 )
 from orders.services import create_order_from_listing, create_order_from_offer
 from orders.serializers import OrderSerializer
@@ -22,6 +23,25 @@ class OwnProfileMixin:
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    def get_permissions(self):
+        if self.action in ("approve", "reject"):
+            return [permissions.IsAdminUser()]
+        return super().get_permissions()
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, uid=None):
+        obj = self.get_object()
+        obj.verification_status = "APPROVED"
+        obj.save(update_fields=["verification_status", "updated_at"])
+        return Response({"success": True, "message": "پروفایل تأیید شد."})
+
+    @action(detail=True, methods=["post"])
+    def reject(self, request, uid=None):
+        obj = self.get_object()
+        obj.verification_status = "REJECTED"
+        obj.save(update_fields=["verification_status", "updated_at"])
+        return Response({"success": True, "message": "پروفایل رد شد."})
 
 
 class RecyclingCenterViewSet(OwnProfileMixin, viewsets.ModelViewSet):
@@ -116,6 +136,43 @@ class OfferViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(seller=self.request.user)
+
+
+class InventoryMovementViewSet(viewsets.ModelViewSet):
+    """Waste in/out ledger for driver/wholesaler/factory/recycling-center dashboards."""
+
+    serializer_class = InventoryMovementSerializer
+    lookup_field = "uid"
+    filterset_fields = ["material", "direction"]
+
+    def get_queryset(self):
+        return InventoryMovement.objects.filter(owner=self.request.user).select_related("material")
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user, recorded_by=self.request.user)
+
+
+class InventoryStockSummaryView(views.APIView):
+    """Current stock per material for the logged-in business account: sum(IN) - sum(OUT)."""
+
+    def get(self, request):
+        rows = (
+            InventoryMovement.objects.filter(owner=request.user)
+            .values("material_id", "material__name", "material__unit")
+            .annotate(
+                stock_kg=Sum(
+                    Case(
+                        When(direction="IN", then=F("weight_kg")),
+                        When(direction="OUT", then=-F("weight_kg")),
+                        output_field=DecimalField(),
+                    )
+                ),
+                total_in=Sum(Case(When(direction="IN", then=F("weight_kg")), default=0, output_field=DecimalField())),
+                total_out=Sum(Case(When(direction="OUT", then=F("weight_kg")), default=0, output_field=DecimalField())),
+            )
+            .order_by("material__name")
+        )
+        return Response({"success": True, "stock": list(rows)})
 
 
 class AcceptOfferView(views.APIView):

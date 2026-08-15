@@ -4,8 +4,10 @@ import { useRegister } from "../api/queries";
 import { Button, Card } from "../components/ui";
 
 export default function Register() {
+  const [customerType, setCustomerType] = useState<"INDIVIDUAL" | "ORGANIZATION">("INDIVIDUAL");
   const [form, setForm] = useState({
     first_name: "", last_name: "", phone_number: "", email: "", password: "", referral_code: "",
+    center_name: "", manager_name: "", manager_phone: "",
   });
   const navigate = useNavigate();
   const register = useRegister();
@@ -17,7 +19,7 @@ export default function Register() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
-      await register.mutateAsync({ ...form, role: "CITIZEN" });
+      await register.mutateAsync({ ...form, role: "CITIZEN", customer_type: customerType });
       navigate("/", { replace: true });
     } catch {
       /* surfaced below */
@@ -33,6 +35,23 @@ export default function Register() {
         </div>
 
         <Card className="p-6">
+          <div className="grid grid-cols-2 gap-2 mb-4 bg-slate-100 rounded-xl p-1">
+            <button
+              type="button"
+              onClick={() => setCustomerType("INDIVIDUAL")}
+              className={`rounded-lg py-2 text-xs font-medium transition ${customerType === "INDIVIDUAL" ? "bg-white text-brand-700 shadow" : "text-ink-500"}`}
+            >
+              👤 حساب شخصی
+            </button>
+            <button
+              type="button"
+              onClick={() => setCustomerType("ORGANIZATION")}
+              className={`rounded-lg py-2 text-xs font-medium transition ${customerType === "ORGANIZATION" ? "bg-white text-brand-700 shadow" : "text-ink-500"}`}
+            >
+              🏢 حساب سازمانی / اداره
+            </button>
+          </div>
+
           <form onSubmit={onSubmit} className="flex flex-col gap-3">
             <div className="grid grid-cols-2 gap-3">
               <input
@@ -59,6 +78,26 @@ export default function Register() {
               className="rounded-xl border border-brand-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300"
               placeholder="رمز عبور (حداقل ۶ کاراکتر)" value={form.password} onChange={(e) => update("password", e.target.value)} required
             />
+
+            {customerType === "ORGANIZATION" && (
+              <div className="flex flex-col gap-3 bg-brand-50/60 rounded-xl p-3 border border-brand-100">
+                <p className="text-[11px] text-ink-500">اطلاعات مرکز/اداره — پس از ثبت‌نام، حساب شما توسط مدیر سبزینو بررسی و تأیید می‌شود.</p>
+                <input
+                  className="rounded-xl border border-brand-100 px-3 py-2.5 text-sm"
+                  placeholder="نام مرکز / اداره" value={form.center_name} onChange={(e) => update("center_name", e.target.value)} required
+                />
+                <input
+                  className="rounded-xl border border-brand-100 px-3 py-2.5 text-sm"
+                  placeholder="نام مدیر / مسئول" value={form.manager_name} onChange={(e) => update("manager_name", e.target.value)} required
+                />
+                <input
+                  className="rounded-xl border border-brand-100 px-3 py-2.5 text-sm"
+                  placeholder="شماره تماس مدیریت" value={form.manager_phone} onChange={(e) => update("manager_phone", e.target.value)}
+                  dir="ltr" style={{ textAlign: "right" }} required
+                />
+              </div>
+            )}
+
             <input
               className="rounded-xl border border-brand-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-300"
               placeholder="کد دعوت (اختیاری)" value={form.referral_code} onChange={(e) => update("referral_code", e.target.value)} dir="ltr" style={{ textAlign: "right" }}

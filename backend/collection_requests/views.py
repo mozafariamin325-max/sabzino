@@ -1,8 +1,8 @@
 from rest_framework import generics, views, viewsets, permissions, status
 from rest_framework.response import Response
 from django.utils import timezone
-from .models import CollectionRequest, RequestStatus
-from .serializers import CollectionRequestSerializer, CreateCollectionRequestSerializer, WeighInSerializer
+from .models import CollectionRequest, RequestStatus, RecurringSchedule
+from .serializers import CollectionRequestSerializer, CreateCollectionRequestSerializer, WeighInSerializer, RecurringScheduleSerializer
 from .services import log_status, find_nearby_open_requests, accept_request, complete_weighing
 
 
@@ -34,6 +34,16 @@ class CollectionRequestViewSet(viewsets.ModelViewSet):
             return Response({"success": False, "message": "این درخواست قابل لغو نیست."}, status=400)
         log_status(obj, RequestStatus.CANCELLED, note="لغو توسط شهروند", changed_by=request.user)
         return Response({"success": True, "message": "درخواست لغو شد."})
+
+
+class RecurringScheduleViewSet(viewsets.ModelViewSet):
+    """Citizen: manage recurring pickups (spec ask: هفتگی/ماهانه)."""
+
+    serializer_class = RecurringScheduleSerializer
+    lookup_field = "uid"
+
+    def get_queryset(self):
+        return RecurringSchedule.objects.filter(citizen=self.request.user).prefetch_related("materials").select_related("address")
 
 
 class NearbyOpenRequestsView(views.APIView):

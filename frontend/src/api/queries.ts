@@ -3,7 +3,9 @@ import { api } from "./client";
 import { useAuthStore } from "../store/auth";
 import type {
   Address, CollectionRequest, GreenPoints, Listing, MaterialCategory,
-  Paginated, RecyclingStation, Wallet, WalletTransaction,
+  Paginated, RecyclingStation, Wallet, WalletTransaction, OrganizationDetail,
+  ProfileChangeRequest, RecurringSchedule, OrgProfile, InventoryMovement, StockRow,
+  VerificationItem,
 } from "./types";
 
 // ---------------- AUTH ----------------
@@ -24,6 +26,8 @@ export function useRegister() {
     mutationFn: async (payload: {
       first_name: string; last_name: string; email?: string; phone_number?: string;
       password: string; role?: string; referral_code?: string;
+      customer_type?: "INDIVIDUAL" | "ORGANIZATION";
+      center_name?: string; manager_name?: string; manager_phone?: string;
     }) => {
       const { data } = await api.post("/auth/register/", payload);
       return data;
@@ -61,6 +65,169 @@ export function useCreateAddress() {
   return useMutation({
     mutationFn: async (payload: Partial<Address>) => (await api.post("/auth/addresses/", payload)).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["addresses"] }),
+  });
+}
+
+export function useUpdateAddress() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: Partial<Address> }) =>
+      (await api.patch(`/auth/addresses/${id}/`, payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["addresses"] }),
+  });
+}
+
+export function useDeleteAddress() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => (await api.delete(`/auth/addresses/${id}/`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["addresses"] }),
+  });
+}
+
+// ---------------- ORGANIZATION / PROFILE CHANGE ----------------
+export function useOrganizationDetail() {
+  return useQuery({
+    queryKey: ["organization-detail"],
+    queryFn: async () => {
+      try {
+        const { data } = await api.get<{ organization: OrganizationDetail }>("/auth/organization/");
+        return data.organization;
+      } catch {
+        return null;
+      }
+    },
+  });
+}
+
+export function useProfileChangeRequests() {
+  return useQuery({
+    queryKey: ["profile-change-requests"],
+    queryFn: async () => (await api.get<Paginated<ProfileChangeRequest>>("/auth/profile-change-requests/")).data.results,
+  });
+}
+
+export function useRequestProfileChange() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { field_name: string; new_value: string }) =>
+      (await api.post("/auth/profile-change-requests/", payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["profile-change-requests"] }),
+  });
+}
+
+export function useUpdateMe() {
+  const qc = useQueryClient();
+  const setUser = useAuthStore((s) => s.setUser);
+  return useMutation({
+    mutationFn: async (payload: Record<string, string>) => (await api.patch("/auth/me/", payload)).data,
+    onSuccess: (data) => {
+      setUser(data.user);
+      qc.invalidateQueries({ queryKey: ["profile-change-requests"] });
+    },
+  });
+}
+
+// ---------------- RECURRING SCHEDULES ----------------
+export function useRecurringSchedules() {
+  return useQuery({
+    queryKey: ["recurring-schedules"],
+    queryFn: async () => (await api.get<Paginated<RecurringSchedule>>("/collections/recurring-schedules/")).data.results,
+  });
+}
+
+export function useCreateRecurringSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => (await api.post("/collections/recurring-schedules/", payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["recurring-schedules"] }),
+  });
+}
+
+export function useDeleteRecurringSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (uid: string) => (await api.delete(`/collections/recurring-schedules/${uid}/`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["recurring-schedules"] }),
+  });
+}
+
+// ---------------- BUSINESS: ORG PROFILES (recycling-center/factory/wholesaler/business) ----------------
+const ORG_ENDPOINTS: Record<string, string> = {
+  RECYCLING_CENTER: "recycling-centers", FACTORY: "factories", WHOLESALER: "wholesalers", BUSINESS: "businesses",
+};
+
+export function useMyOrgProfile(kind: string) {
+  return useQuery({
+    queryKey: ["org-profile", kind],
+    queryFn: async () => {
+      try {
+        const { data } = await api.get<Paginated<OrgProfile> | OrgProfile[]>(`/marketplace/${ORG_ENDPOINTS[kind]}/`);
+        const list = Array.isArray(data) ? data : data.results;
+        return list[0] || null;
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!ORG_ENDPOINTS[kind],
+  });
+}
+
+export function useRegisterOrgProfile(kind: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => (await api.post(`/marketplace/${ORG_ENDPOINTS[kind]}/`, payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["org-profile", kind] }),
+  });
+}
+
+// ---------------- BUSINESS: INVENTORY IN/OUT ----------------
+export function useInventoryMovements() {
+  return useQuery({
+    queryKey: ["inventory-movements"],
+    queryFn: async () => (await api.get<Paginated<InventoryMovement>>("/marketplace/inventory/")).data.results,
+  });
+}
+
+export function useCreateInventoryMovement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => (await api.post("/marketplace/inventory/", payload)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["inventory-movements"] });
+      qc.invalidateQueries({ queryKey: ["stock-summary"] });
+    },
+  });
+}
+
+export function useStockSummary() {
+  return useQuery({
+    queryKey: ["stock-summary"],
+    queryFn: async () => (await api.get<{ stock: StockRow[] }>("/marketplace/inventory/stock-summary/")).data.stock,
+  });
+}
+
+// ---------------- ADMIN: VERIFICATION CENTER + CHARTS ----------------
+export function useVerificationCenter() {
+  return useQuery({
+    queryKey: ["verification-center"],
+    queryFn: async () => (await api.get<{ items: VerificationItem[]; count: number }>("/verification-center/")).data,
+    refetchInterval: 20_000,
+  });
+}
+
+export function useDecideVerification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ url, note }: { url: string; note?: string }) => (await api.post(url, { note: note || "" })).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["verification-center"] }),
+  });
+}
+
+export function useAdminCharts(days = 30) {
+  return useQuery({
+    queryKey: ["admin-charts", days],
+    queryFn: async () => (await api.get("/charts/", { params: { days } })).data,
   });
 }
 

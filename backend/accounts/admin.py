@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, UserRole, Address, OTPRequest
+from .models import User, UserRole, Address, OTPRequest, OrganizationDetail, ProfileChangeRequest
 
 
 class UserRoleInline(admin.TabularInline):
@@ -27,3 +27,17 @@ class AddressAdmin(admin.ModelAdmin):
 @admin.register(OTPRequest)
 class OTPRequestAdmin(admin.ModelAdmin):
     list_display = ("phone_number", "code", "is_used", "expires_at", "created_at")
+
+
+@admin.register(OrganizationDetail)
+class OrganizationDetailAdmin(admin.ModelAdmin):
+    list_display = ("center_name", "manager_name", "manager_phone", "user", "verification_status")
+    list_filter = ("verification_status",)
+    search_fields = ("center_name", "manager_name", "user__username")
+
+
+@admin.register(ProfileChangeRequest)
+class ProfileChangeRequestAdmin(admin.ModelAdmin):
+    list_display = ("user", "field_name", "old_value", "new_value", "status", "created_at")
+    list_filter = ("status", "field_name")
+    search_fields = ("user__username",)

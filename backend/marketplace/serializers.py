@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from materials.serializers import MaterialSerializer
-from .models import RecyclingCenter, Factory, Wholesaler, Business, Listing, ListingImage, PurchaseRequest, Offer
+from .models import (
+    RecyclingCenter, Factory, Wholesaler, Business, Listing, ListingImage, PurchaseRequest, Offer,
+    InventoryMovement,
+)
 
 
 class RecyclingCenterSerializer(serializers.ModelSerializer):
@@ -72,3 +75,25 @@ class OfferSerializer(serializers.ModelSerializer):
         model = Offer
         fields = ("uid", "purchase_request", "seller", "seller_name", "quantity_kg", "price_per_kg", "message", "status", "created_at")
         read_only_fields = ("seller", "status")
+
+
+class InventoryMovementSerializer(serializers.ModelSerializer):
+    material_detail = MaterialSerializer(source="material", read_only=True)
+    direction_display = serializers.CharField(source="get_direction_display", read_only=True)
+
+    class Meta:
+        model = InventoryMovement
+        fields = (
+            "uid", "material", "material_detail", "direction", "direction_display", "weight_kg",
+            "unit_price_snapshot", "total_value", "counterparty_name", "note", "created_at",
+        )
+        read_only_fields = ("uid", "created_at")
+
+    def create(self, validated_data):
+        material = validated_data["material"]
+        weight_kg = validated_data["weight_kg"]
+        if not validated_data.get("unit_price_snapshot"):
+            validated_data["unit_price_snapshot"] = material.current_price
+        if not validated_data.get("total_value") and validated_data.get("unit_price_snapshot"):
+            validated_data["total_value"] = validated_data["unit_price_snapshot"] * weight_kg
+        return super().create(validated_data)

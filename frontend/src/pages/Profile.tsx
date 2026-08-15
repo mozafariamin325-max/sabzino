@@ -1,15 +1,29 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/auth";
-import { useGreenPoints } from "../api/queries";
-import { Card, TopBar } from "../components/ui";
+import { useGreenPoints, useProfileChangeRequests, useUpdateMe } from "../api/queries";
+import { Button, Card, TopBar } from "../components/ui";
 
 export default function Profile() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { data: points } = useGreenPoints();
+  const { data: pendingChanges } = useProfileChangeRequests();
+  const updateMe = useUpdateMe();
   const navigate = useNavigate();
 
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    first_name: user?.first_name || "", last_name: user?.last_name || "", phone_number: user?.phone_number || "",
+  });
+
   const roles = user?.roles?.map((r) => r.role) || [];
+  const myPending = (pendingChanges || []).filter((c) => c.status === "PENDING");
+
+  async function saveEdits() {
+    await updateMe.mutateAsync(form);
+    setEditing(false);
+  }
 
   return (
     <div>
@@ -19,7 +33,7 @@ export default function Profile() {
           <div className="w-14 h-14 rounded-2xl bg-brand-500 text-white flex items-center justify-center text-xl font-bold">
             {user?.first_name?.[0] || "س"}
           </div>
-          <div>
+          <div className="flex-1">
             <p className="font-bold text-ink-900">
               {user?.first_name} {user?.last_name}
             </p>
@@ -30,7 +44,46 @@ export default function Profile() {
               </p>
             )}
           </div>
+          <button className="text-xs text-brand-600 font-medium" onClick={() => setEditing((e) => !e)}>
+            {editing ? "انصراف" : "ویرایش"}
+          </button>
         </Card>
+
+        {editing && (
+          <Card className="p-4 mt-3 flex flex-col gap-2.5">
+            <p className="text-[11px] text-ink-500">تغییر نام یا شماره موبایل باید توسط مدیر سبزینو تأیید شود و بلافاصله اعمال نمی‌شود.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                className="rounded-xl border border-brand-100 px-3 py-2.5 text-sm"
+                placeholder="نام" value={form.first_name}
+                onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))}
+              />
+              <input
+                className="rounded-xl border border-brand-100 px-3 py-2.5 text-sm"
+                placeholder="نام خانوادگی" value={form.last_name}
+                onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))}
+              />
+            </div>
+            <input
+              className="rounded-xl border border-brand-100 px-3 py-2.5 text-sm" dir="ltr" style={{ textAlign: "right" }}
+              placeholder="شماره موبایل" value={form.phone_number || ""}
+              onChange={(e) => setForm((f) => ({ ...f, phone_number: e.target.value }))}
+            />
+            {updateMe.error && <p className="text-red-600 text-xs">{(updateMe.error as Error).message}</p>}
+            <Button full loading={updateMe.isPending} onClick={saveEdits}>ثبت درخواست تغییر</Button>
+          </Card>
+        )}
+
+        {myPending.length > 0 && (
+          <Card className="p-4 mt-3 bg-amber-50 border border-amber-200">
+            <p className="text-xs font-bold text-amber-800 mb-2">در انتظار تأیید مدیر</p>
+            {myPending.map((c) => (
+              <p key={c.uid} className="text-[11px] text-amber-700">
+                {c.field_display}: «{c.old_value}» ← «{c.new_value}»
+              </p>
+            ))}
+          </Card>
+        )}
 
         <Card className="p-4 mt-3 flex items-center justify-between">
           <div>
@@ -44,8 +97,9 @@ export default function Profile() {
 
         <div className="mt-5 flex flex-col gap-2">
           <MenuLink to="/requests" icon="📦" label="درخواست‌های من" />
+          <MenuLink to="/addresses" icon="📍" label="آدرس‌های من" />
           <MenuLink to="/wallet" icon="👛" label="کیف پول" />
-          <MenuLink to="/stations" icon="📍" label="ایستگاه‌های بازیافت" />
+          <MenuLink to="/stations" icon="🏪" label="ایستگاه‌های بازیافت" />
           <MenuLink to="/leaderboard" icon="🏆" label="رتبه‌بندی شهروندان" />
 
           {roles.includes("COLLECTOR") ? (
@@ -54,6 +108,10 @@ export default function Profile() {
             <MenuLink to="/collector/register" icon="🚚" label="ثبت‌نام به‌عنوان جمع‌آور" />
           )}
           {roles.includes("STATION_OPERATOR") && <MenuLink to="/station-operator" icon="🏪" label="پنل اپراتور ایستگاه" />}
+          {roles.includes("FACTORY") && <MenuLink to="/business/FACTORY" icon="🏭" label="داشبورد کارخانه" />}
+          {roles.includes("WHOLESALER") && <MenuLink to="/business/WHOLESALER" icon="🚛" label="داشبورد خریدار عمده" />}
+          {roles.includes("RECYCLING_CENTER") && <MenuLink to="/business/RECYCLING_CENTER" icon="♻️" label="داشبورد مرکز بازیافت" />}
+          {roles.includes("BUSINESS") && <MenuLink to="/business/BUSINESS" icon="🏬" label="داشبورد کسب‌وکار" />}
           {(user?.is_staff || roles.includes("MUNICIPALITY")) && <MenuLink to="/admin" icon="🛠️" label="داشبورد مدیریت" />}
         </div>
 

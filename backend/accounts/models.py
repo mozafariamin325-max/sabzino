@@ -33,6 +33,11 @@ class User(AbstractUser, UUIDModel):
         "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="referrals"
     )
     is_suspended = models.BooleanField(default=False)
+    customer_type = models.CharField(
+        max_length=16,
+        choices=[("INDIVIDUAL", "شخصی"), ("ORGANIZATION", "سازمانی / اداره")],
+        default="INDIVIDUAL",
+    )
 
     def __str__(self):
         return self.get_full_name() or self.username
@@ -87,3 +92,71 @@ class OTPRequest(TimeStampedModel):
 
     def __str__(self):
         return f"OTP({self.phone_number})"
+
+
+class CustomerType(models.TextChoices):
+    INDIVIDUAL = "INDIVIDUAL", "شخصی"
+    ORGANIZATION = "ORGANIZATION", "سازمانی / اداره"
+
+
+class OrgVerificationStatus(models.TextChoices):
+    PENDING = "PENDING", "در انتظار بررسی"
+    APPROVED = "APPROVED", "تأیید شده"
+    REJECTED = "REJECTED", "رد شده"
+
+
+class OrganizationDetail(TimeStampedModel):
+    """
+    Extra fields for a CITIZEN account registered as an organization/office
+    (اداره) rather than an individual — spec ask: نام مرکز، نام مدیریت، شماره مدیریت.
+    Kept separate from marketplace org profiles (RecyclingCenter/Factory/...)
+    which represent seller/buyer businesses, not service customers.
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="organization_detail")
+    center_name = models.CharField(max_length=128, verbose_name="نام مرکز/اداره")
+    manager_name = models.CharField(max_length=128, verbose_name="نام مدیر/مسئول")
+    manager_phone = models.CharField(max_length=15, verbose_name="شماره مدیریت")
+    verification_status = models.CharField(
+        max_length=16, choices=OrgVerificationStatus.choices, default=OrgVerificationStatus.PENDING
+    )
+    verification_note = models.CharField(max_length=255, blank=True)
+
+    def __str__(self):
+        return f"{self.center_name} ({self.user})"
+
+
+class ProfileChangeField(models.TextChoices):
+    FIRST_NAME = "first_name", "نام"
+    LAST_NAME = "last_name", "نام خانوادگی"
+    PHONE_NUMBER = "phone_number", "شماره موبایل"
+    EMAIL = "email", "ایمیل"
+
+
+class ProfileChangeStatus(models.TextChoices):
+    PENDING = "PENDING", "در انتظار تأیید"
+    APPROVED = "APPROVED", "تأیید شده"
+    REJECTED = "REJECTED", "رد شده"
+
+
+class ProfileChangeRequest(TimeStampedModel, UUIDModel):
+    """
+    Sensitive profile edits (name / phone) require Admin approval before they
+    take effect (spec section 31/76-style admin-tunable governance). Other
+    fields (e.g. avatar) can still be changed directly via MeView.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="profile_change_requests")
+    field_name = models.CharField(max_length=32, choices=ProfileChangeField.choices)
+    old_value = models.CharField(max_length=128, blank=True)
+    new_value = models.CharField(max_length=128)
+    status = models.CharField(max_length=16, choices=ProfileChangeStatus.choices, default=ProfileChangeStatus.PENDING)
+    reviewed_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    review_note = models.CharField(max_length=255, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user} -> {self.field_name}={self.new_value} ({self.status})"

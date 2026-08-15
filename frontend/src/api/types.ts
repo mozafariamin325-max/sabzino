@@ -89,6 +89,7 @@ export interface CollectionRequest {
   uid: string;
   code: string;
   materials: Material[];
+  items?: CollectionRequestItem[];
   amount_range: string;
   amount_range_display: string;
   address_text_snapshot: string;
@@ -143,6 +144,130 @@ export interface Paginated<T> {
   next: string | null;
   previous: string | null;
   results: T[];
+}
+
+export interface Role {
+  role: string;
+  is_primary: boolean;
+}
+
+export interface OrganizationDetail {
+  id: number;
+  user: number;
+  user_name: string;
+  user_phone: string;
+  center_name: string;
+  manager_name: string;
+  manager_phone: string;
+  verification_status: "PENDING" | "APPROVED" | "REJECTED";
+  verification_note: string;
+}
+
+export interface User {
+  id: number;
+  uid: string;
+  username: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone_number: string | null;
+  phone_verified: boolean;
+  avatar: string | null;
+  referral_code: string;
+  customer_type: "INDIVIDUAL" | "ORGANIZATION";
+  roles: Role[];
+  organization_detail: OrganizationDetail | null;
+  is_staff: boolean;
+  date_joined: string;
+}
+
+export interface ProfileChangeRequest {
+  uid: string;
+  user_name?: string;
+  field_name: string;
+  field_display: string;
+  old_value: string;
+  new_value: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  review_note: string;
+  reviewer_name?: string;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface CollectionRequestItem {
+  material: number;
+  material_name: string;
+  material_detail: Material;
+  weight_kg: string;
+  is_exact: boolean;
+}
+
+export interface RecurringSchedule {
+  uid: string;
+  address: number;
+  address_text: string;
+  material_ids: number[];
+  materials_detail: Material[];
+  frequency: "WEEKLY" | "BIWEEKLY" | "MONTHLY";
+  frequency_display: string;
+  day_of_week: number | null;
+  day_of_month: number | null;
+  preferred_hour: number;
+  is_active: boolean;
+  next_run_date: string;
+  created_at: string;
+}
+
+export const WEEKDAY_LABELS = ["شنبه", "یک‌شنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه"];
+
+export interface OrgProfile {
+  id: number;
+  uid: string;
+  user: number;
+  name: string;
+  national_id: string;
+  city: string;
+  address: string;
+  lat: string | null;
+  lng: string | null;
+  phone_number: string;
+  verification_status: "PENDING" | "APPROVED" | "REJECTED";
+  documents: string | null;
+}
+
+export interface InventoryMovement {
+  uid: string;
+  material: number;
+  material_detail: Material;
+  direction: "IN" | "OUT";
+  direction_display: string;
+  weight_kg: string;
+  unit_price_snapshot: string | null;
+  total_value: string | null;
+  counterparty_name: string;
+  note: string;
+  created_at: string;
+}
+
+export interface StockRow {
+  material_id: number;
+  material__name: string;
+  material__unit: string;
+  stock_kg: number;
+  total_in: number;
+  total_out: number;
+}
+
+export interface VerificationItem {
+  type: string;
+  id: number;
+  label: string;
+  detail: string;
+  created_at: string;
+  approve_url: string;
+  reject_url?: string;
+  action: string;
 }
 
 export const AMOUNT_RANGES: { value: string; label: string }[] = [

@@ -1,4 +1,5 @@
 from rest_framework import generics, views, viewsets, permissions, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from accounts.models import UserRole, Role
 from .models import CollectorProfile, Vehicle, CollectorDocument
@@ -88,3 +89,19 @@ class AdminCollectorViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAdminUser]
     filterset_fields = ["verification_status", "city"]
     search_fields = ["user__first_name", "user__last_name", "user__phone_number"]
+
+    @action(detail=True, methods=["post"])
+    def approve(self, request, pk=None):
+        profile = self.get_object()
+        profile.verification_status = "APPROVED"
+        profile.verification_note = request.data.get("note", "")
+        profile.save(update_fields=["verification_status", "verification_note", "updated_at"])
+        return Response({"success": True, "message": "جمع‌آور تأیید شد."})
+
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        profile = self.get_object()
+        profile.verification_status = "REJECTED"
+        profile.verification_note = request.data.get("note", "")
+        profile.save(update_fields=["verification_status", "verification_note", "updated_at"])
+        return Response({"success": True, "message": "جمع‌آور رد شد."})

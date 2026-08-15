@@ -8,7 +8,7 @@ class VerificationStatus(models.TextChoices):
     REJECTED = "REJECTED", "رد شده"
 
 
-class OrgProfileBase(TimeStampedModel):
+class OrgProfileBase(TimeStampedModel, UUIDModel):
     user = models.OneToOneField("accounts.User", on_delete=models.CASCADE, related_name="%(class)s_profile")
     name = models.CharField(max_length=128)
     national_id = models.CharField(max_length=20, blank=True)
@@ -103,6 +103,38 @@ class PurchaseRequest(TimeStampedModel, UUIDModel):
 
     def __str__(self):
         return f"نیاز {self.material} x {self.quantity_kg}kg - {self.buyer}"
+
+
+class InventoryMovementDirection(models.TextChoices):
+    IN = "IN", "ورود"
+    OUT = "OUT", "خروج"
+
+
+class InventoryMovement(TimeStampedModel, UUIDModel):
+    """
+    Waste in/out ledger for a business account (spec ask: راننده/خریدار عمده/
+    کارخانه بتوانند ورود و خروج پسماند را مدیریت کنند). Current stock per
+    material is derived as sum(IN) - sum(OUT) for that owner — never stored,
+    so it can never drift out of sync with the movement log.
+    """
+
+    owner = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="inventory_movements")
+    material = models.ForeignKey("materials.Material", on_delete=models.PROTECT, related_name="inventory_movements")
+    direction = models.CharField(max_length=4, choices=InventoryMovementDirection.choices)
+    weight_kg = models.DecimalField(max_digits=10, decimal_places=1)
+    unit_price_snapshot = models.DecimalField(max_digits=12, decimal_places=0, null=True, blank=True)
+    total_value = models.DecimalField(max_digits=14, decimal_places=0, null=True, blank=True)
+    counterparty_name = models.CharField(max_length=128, blank=True, help_text="تحویل‌دهنده یا تحویل‌گیرنده")
+    note = models.CharField(max_length=255, blank=True)
+    recorded_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.get_direction_display()} {self.weight_kg}kg {self.material} - {self.owner}"
 
 
 class Offer(TimeStampedModel, UUIDModel):

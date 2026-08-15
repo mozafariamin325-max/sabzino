@@ -21,6 +21,8 @@ import CollectorRegister from "./pages/CollectorRegister";
 import CollectorHome from "./pages/CollectorHome";
 import StationOperator from "./pages/StationOperator";
 import AdminDashboard from "./pages/AdminDashboard";
+import AddressBook from "./pages/AddressBook";
+import BusinessDashboard from "./pages/BusinessDashboard";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -61,9 +63,11 @@ export default function App() {
       <Route path="/notifications" element={<RequireAuth><AppLayout><Notifications /></AppLayout></RequireAuth>} />
       <Route path="/leaderboard" element={<RequireAuth><AppLayout><Leaderboard /></AppLayout></RequireAuth>} />
 
+      <Route path="/addresses" element={<RequireAuth><AppLayout><AddressBook /></AppLayout></RequireAuth>} />
       <Route path="/collector/register" element={<RequireAuth><AppLayout><CollectorRegister /></AppLayout></RequireAuth>} />
       <Route path="/collector" element={<RequireAuth><AppLayout><CollectorHome /></AppLayout></RequireAuth>} />
       <Route path="/station-operator" element={<RequireAuth><AppLayout><StationOperator /></AppLayout></RequireAuth>} />
+      <Route path="/business/:kind" element={<RequireAuth><AppLayout><BusinessDashboard /></AppLayout></RequireAuth>} />
       <Route path="/admin" element={<RequireAuth><AppLayout><AdminDashboard /></AppLayout></RequireAuth>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
