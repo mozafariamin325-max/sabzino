@@ -23,6 +23,9 @@ import StationOperator from "./pages/StationOperator";
 import AdminDashboard from "./pages/AdminDashboard";
 import AddressBook from "./pages/AddressBook";
 import BusinessDashboard from "./pages/BusinessDashboard";
+import Calculator from "./pages/Calculator";
+import CameraScan from "./pages/CameraScan";
+import Missions from "./pages/Missions";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -62,6 +65,9 @@ export default function App() {
       <Route path="/marketplace" element={<RequireAuth><AppLayout><Marketplace /></AppLayout></RequireAuth>} />
       <Route path="/notifications" element={<RequireAuth><AppLayout><Notifications /></AppLayout></RequireAuth>} />
       <Route path="/leaderboard" element={<RequireAuth><AppLayout><Leaderboard /></AppLayout></RequireAuth>} />
+      <Route path="/calculator" element={<RequireAuth><AppLayout><Calculator /></AppLayout></RequireAuth>} />
+      <Route path="/scan" element={<RequireAuth><AppLayout><CameraScan /></AppLayout></RequireAuth>} />
+      <Route path="/missions" element={<RequireAuth><AppLayout><Missions /></AppLayout></RequireAuth>} />
 
       <Route path="/addresses" element={<RequireAuth><AppLayout><AddressBook /></AppLayout></RequireAuth>} />
       <Route path="/collector/register" element={<RequireAuth><AppLayout><CollectorRegister /></AppLayout></RequireAuth>} />

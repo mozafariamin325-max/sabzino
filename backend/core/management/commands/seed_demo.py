@@ -86,19 +86,43 @@ class Command(BaseCommand):
     def seed_locations(self):
         province, _ = Province.objects.get_or_create(name="کهگیلویه و بویراحمد")
         city, _ = City.objects.get_or_create(province=province, name="یاسوج", defaults={"lat": Decimal("30.6683"), "lng": Decimal("51.5877")})
+        # Local-identity branding kit (spec section 13) — Yasuj active now,
+        # other major cities pre-registered but dormant (has_identity=False)
+        # so the architecture is ready without needing photo assets yet.
+        city.has_identity = True
+        city.landmark_name = "کوه دنا"
+        city.landmark_icon = "🏔️"
+        city.theme_color_from = "#0b3d24"
+        city.theme_color_to = "#178a49"
+        city.hero_tagline = "از دل زاگرس، برای یک یاسوج پاکیزه‌تر"
+        city.save(update_fields=[
+            "has_identity", "landmark_name", "landmark_icon", "theme_color_from", "theme_color_to", "hero_tagline",
+        ])
         for d in DISTRICTS_YASUJ:
             District.objects.get_or_create(city=city, name=d)
+
+        dormant_cities = [
+            ("فارس", "شیراز", "تخت جمشید", "🏛️"),
+            ("اصفهان", "اصفهان", "سی‌وسه‌پل", "🌉"),
+            ("تهران", "تهران", "برج میلاد", "🌆"),
+        ]
+        for prov_name, city_name, landmark, icon in dormant_cities:
+            prov, _ = Province.objects.get_or_create(name=prov_name)
+            City.objects.get_or_create(
+                province=prov, name=city_name,
+                defaults={"landmark_name": landmark, "landmark_icon": icon, "has_identity": False},
+            )
         return province, city
 
     # ---------------------------------------------------------------- materials
     def seed_materials(self):
         data = {
             "پلاستیک": [
-                ("پلاستیک سخت", 8000, 0.5), ("پت (PET)", 12000, 0.6),
-                ("پلاستیک نایلونی", 5000, 0.4), ("ظروف یکبار مصرف", 4500, 0.3),
+                ("پلاستیک", 7500, 0.5), ("پت (PET)", 12000, 0.6),
+                ("نایلون", 4000, 0.35), ("ظروف یکبار مصرف", 4500, 0.3),
             ],
             "کاغذ و مقوا": [
-                ("کارتن", 4000, 0.3), ("کاغذ اداری", 3500, 0.3), ("روزنامه و مجله", 2800, 0.25),
+                ("کارتن", 4000, 0.3), ("کاغذ", 3500, 0.3), ("روزنامه و مجله", 2800, 0.25),
             ],
             "فلزات": [
                 ("آهن", 9000, 0.8), ("آلومینیوم", 35000, 1.2), ("مس", 180000, 1.5),
@@ -106,12 +130,12 @@ class Command(BaseCommand):
             ],
             "شیشه": [("شیشه شکسته", 1500, 0.2), ("بطری شیشه‌ای", 2000, 0.2)],
             "الکترونیک": [
-                ("لوازم الکترونیکی مجاز", 15000, 0.4), ("موبایل و لپ‌تاپ فرسوده", 40000, 0.7),
+                ("ضایعات الکترونیکی", 18000, 0.5), ("موبایل و لپ‌تاپ فرسوده", 40000, 0.7),
                 ("کابل و سیم برق", 25000, 0.5),
             ],
             "پارچه و لباس": [("پارچه و لباس کهنه", 3000, 0.3)],
             "روغن پخت‌وپز": [("روغن خوراکی مستعمل", 6000, 0.2)],
-            "باتری و لوازم جانبی": [("باتری فرسوده", 12000, 0.3)],
+            "باتری و لوازم جانبی": [("باتری", 12000, 0.3)],
             "لاستیک": [("لاستیک فرسوده خودرو", 5000, 0.4)],
             "چوب": [("ضایعات چوب و پالت", 2000, 0.2)],
         }
@@ -119,17 +143,37 @@ class Command(BaseCommand):
             "پلاستیک": "♻️", "کاغذ و مقوا": "📦", "فلزات": "🔩", "شیشه": "🍾", "الکترونیک": "🔌",
             "پارچه و لباس": "👕", "روغن پخت‌وپز": "🛢️", "باتری و لوازم جانبی": "🔋", "لاستیک": "🛞", "چوب": "🪵",
         }
+        # Reference free-market price for each of the 11 "قیمت روز" homepage
+        # materials, expressed as a ratio of Sabzino's buy price — Sabzino
+        # pays a bit more than the informal scrap market (product story:
+        # guaranteed fair price vs. scattered street buyers).
+        market_ratio = {
+            "آهن": 0.90, "مس": 0.88, "آلومینیوم": 0.90, "برنج": 0.87, "کارتن": 0.85,
+            "کاغذ": 0.85, "پت (PET)": 0.88, "پلاستیک": 0.85, "نایلون": 0.80,
+            "باتری": 0.90, "ضایعات الکترونیکی": 0.82,
+        }
         categories = {}
         for i, (cat_name, materials) in enumerate(data.items()):
             cat, _ = MaterialCategory.objects.get_or_create(name=cat_name, defaults={"icon": icons.get(cat_name, "♻️"), "order": i})
             categories[cat_name] = cat
             for mat_name, price, co2 in materials:
                 slug = mat_name.replace(" ", "-").replace("(", "").replace(")", "")
-                mat, _ = Material.objects.get_or_create(
+                mat, created = Material.objects.get_or_create(
                     slug=slug, defaults={"category": cat, "name": mat_name, "co2_kg_saved_per_kg": Decimal(str(co2))}
                 )
-                if not mat.prices.filter(active=True).exists():
-                    MaterialPrice.objects.create(material=mat, price_per_unit=Decimal(str(price)), active=True)
+                if not created and mat.name != mat_name:
+                    mat.name = mat_name
+                    mat.save(update_fields=["name"])
+                existing_price = mat.prices.filter(active=True).first()
+                ratio = market_ratio.get(mat_name)
+                market_price = Decimal(str(round(price * ratio, -2))) if ratio else None
+                if not existing_price:
+                    MaterialPrice.objects.create(
+                        material=mat, price_per_unit=Decimal(str(price)), market_price=market_price, active=True,
+                    )
+                elif ratio and existing_price.market_price is None:
+                    existing_price.market_price = market_price
+                    existing_price.save(update_fields=["market_price"])
         return categories
 
     def seed_commission_rules(self):

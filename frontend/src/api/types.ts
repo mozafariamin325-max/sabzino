@@ -322,6 +322,109 @@ export interface GlobalSearchResult {
   orders: SearchOrderResult[];
 }
 
+// ---------------- PRICING ("قیمت روز") ----------------
+export interface MaterialPrice {
+  id: number;
+  material: number;
+  material_name: string;
+  material_icon: string;
+  material_slug: string;
+  category_name: string;
+  unit: string;
+  unit_display: string;
+  price_per_unit: string;
+  market_price: string | null;
+  min_price: string | null;
+  max_price: string | null;
+  active: boolean;
+  effective_from: string;
+  effective_to: string | null;
+}
+
+// ---------------- CITIES / LOCAL IDENTITY ----------------
+export interface City {
+  id: number;
+  name: string;
+  province: number;
+  lat: string | null;
+  lng: string | null;
+  has_identity: boolean;
+  landmark_name: string;
+  landmark_icon: string;
+  theme_color_from: string;
+  theme_color_to: string;
+  hero_tagline: string;
+}
+
+// ---------------- GAMIFICATION / MISSIONS ----------------
+export interface ChallengeProgress {
+  progress_value: number;
+  completed: boolean;
+}
+
+export interface Challenge {
+  id: number;
+  title: string;
+  description: string;
+  type: "WEIGHT" | "TRANSACTIONS" | "STREAK" | "REFERRAL" | "NEIGHBORHOOD";
+  target_value: string;
+  reward_points: number;
+  start_at: string;
+  end_at: string;
+  is_active: boolean;
+  my_progress: ChallengeProgress | null;
+}
+
+// ---------------- LEADERBOARD ----------------
+export interface LeaderboardRow {
+  rank: number;
+  name: string;
+  points: number;
+  level: number;
+}
+
+export interface NeighborhoodLeaderboardRow {
+  rank: number;
+  neighborhood: string;
+  total_weight_kg: number;
+  active_users: number;
+}
+
+// ---------------- ENVIRONMENTAL IMPACT ("اثر من") ----------------
+export interface MyImpact {
+  is_estimated: boolean;
+  total_kg_recycled: number;
+  co2_kg_saved_estimated: number;
+  completed_requests: number;
+  note: string;
+}
+
+// ---------------- AI WASTE CLASSIFICATION (mock) ----------------
+export interface ClassifyResult {
+  success: boolean;
+  is_mock: boolean;
+  material_id: number;
+  material_name: string;
+  material_slug: string;
+  material_icon: string;
+  category_name: string;
+  recyclable: boolean;
+  confidence: number;
+  unit: string;
+  approx_price_per_unit: number | null;
+  note: string;
+}
+
+// ---------------- NEARBY COLLECTORS (map) ----------------
+export interface NearbyCollector {
+  id: number;
+  name: string;
+  lat: string;
+  lng: string;
+  rating_avg: string;
+  distance_km: number | null;
+}
+
 export const STATUS_LABELS: Record<string, string> = {
   REQUESTED: "ثبت شده",
   SEARCHING_COLLECTOR: "در جستجوی جمع‌آور",

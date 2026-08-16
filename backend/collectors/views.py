@@ -42,6 +42,43 @@ class MyCollectorProfileView(views.APIView):
         return Response({"success": True, "collector": serializer.data})
 
 
+class NearbyCollectorsView(views.APIView):
+    """
+    Public list of online, approved collectors with a location — feeds the
+    citizen-facing "smart map" (spec section 9) alongside stations. Only
+    exposes coarse identity (first name + rating), never phone/national ID.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        from collection_requests.services import haversine_km
+
+        lat, lng = request.query_params.get("lat"), request.query_params.get("lng")
+        qs = CollectorProfile.objects.filter(
+            is_online=True, verification_status="APPROVED",
+            current_lat__isnull=False, current_lng__isnull=False,
+        ).select_related("user")
+        collectors = list(qs)
+        if lat and lng:
+            for c in collectors:
+                c.distance_km = round(haversine_km(lat, lng, c.current_lat, c.current_lng), 2)
+            collectors.sort(key=lambda c: c.distance_km)
+
+        data = [
+            {
+                "id": c.id,
+                "name": c.user.first_name or "جمع‌آور سبزینو",
+                "lat": c.current_lat,
+                "lng": c.current_lng,
+                "rating_avg": c.rating_avg,
+                "distance_km": getattr(c, "distance_km", None),
+            }
+            for c in collectors
+        ]
+        return Response({"success": True, "collectors": data})
+
+
 class ToggleOnlineView(views.APIView):
     def post(self, request):
         profile = getattr(request.user, "collector_profile", None)

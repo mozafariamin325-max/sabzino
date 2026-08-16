@@ -1,7 +1,7 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
-    CollectorRegisterView, MyCollectorProfileView, ToggleOnlineView,
+    CollectorRegisterView, MyCollectorProfileView, ToggleOnlineView, NearbyCollectorsView,
     VehicleViewSet, CollectorDocumentViewSet, AdminCollectorViewSet,
 )
 
@@ -14,4 +14,5 @@ urlpatterns = [
     path("register/", CollectorRegisterView.as_view(), name="collector-register"),
     path("me/", MyCollectorProfileView.as_view(), name="collector-me"),
     path("me/toggle-online/", ToggleOnlineView.as_view(), name="collector-toggle-online"),
+    path("nearby/", NearbyCollectorsView.as_view(), name="collector-nearby"),
 ] + router.urls

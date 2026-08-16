@@ -13,7 +13,13 @@ class MaterialPrice(TimeStampedModel):
     """
 
     material = models.ForeignKey(Material, on_delete=models.CASCADE, related_name="prices")
-    price_per_unit = models.DecimalField(max_digits=12, decimal_places=0, help_text="Toman")
+    price_per_unit = models.DecimalField(
+        max_digits=12, decimal_places=0, help_text="Toman — قیمت خرید سبزینو از شهروند"
+    )
+    market_price = models.DecimalField(
+        max_digits=12, decimal_places=0, null=True, blank=True,
+        help_text="Toman — قیمت مرجع بازار آزاد برای همان واحد (اختیاری، صرفاً جهت مقایسه در «قیمت روز»)",
+    )
     min_price = models.DecimalField(max_digits=12, decimal_places=0, null=True, blank=True)
     max_price = models.DecimalField(max_digits=12, decimal_places=0, null=True, blank=True)
     active = models.BooleanField(default=True)

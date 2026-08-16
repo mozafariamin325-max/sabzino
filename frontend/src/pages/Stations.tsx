@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import L from "leaflet";
-import { useStations } from "../api/queries";
+import { useStations, useNearbyCollectorsMap } from "../api/queries";
 import { Card, CenterLoading, TopBar } from "../components/ui";
 import "leaflet/dist/leaflet.css";
 
@@ -12,11 +12,19 @@ const stationIcon = new L.DivIcon({
   iconAnchor: [14, 28],
 });
 
+const collectorIcon = new L.DivIcon({
+  html: `<div style="background:#2563eb;width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3)"><span style="transform:rotate(45deg);font-size:13px">🚚</span></div>`,
+  className: "",
+  iconSize: [28, 28],
+  iconAnchor: [14, 28],
+});
+
 const YASUJ_CENTER: [number, number] = [30.6683, 51.5877];
 
 export default function Stations() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | undefined>(undefined);
   const { data: stations, isLoading } = useStations(coords);
+  const { data: collectors } = useNearbyCollectorsMap(coords);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -51,8 +59,32 @@ export default function Stations() {
                   </Marker>
                 )
             )}
+            {(collectors || []).map((c) => {
+              const lat = Number(c.lat);
+              const lng = Number(c.lng);
+              if (!c.lat || !c.lng || Number.isNaN(lat) || Number.isNaN(lng)) return null;
+              return (
+                <Marker key={c.id} position={[lat, lng]} icon={collectorIcon}>
+                  <Popup>
+                    <b>{c.name}</b>
+                    <br />
+                    ⭐ {c.rating_avg}
+                  </Popup>
+                </Marker>
+              );
+            })}
           </MapContainer>
         </Card>
+        <div className="flex items-center gap-3 mt-2">
+          <span className="flex items-center gap-1 text-[11px] text-ink-500">
+            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: "#16a34a" }} />
+            ایستگاه‌ها
+          </span>
+          <span className="flex items-center gap-1 text-[11px] text-ink-500">
+            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: "#2563eb" }} />
+            جمع‌آورها
+          </span>
+        </div>
       </div>
 
       <div className="px-4">

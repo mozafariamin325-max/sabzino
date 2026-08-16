@@ -17,6 +17,7 @@ from rewards.models import Challenge
 from .models import Rating
 from .serializers import RatingSerializer
 from .services import create_rating, qr_data_url
+from .ai_services import WasteClassificationService
 
 
 class AdminDashboardView(views.APIView):
@@ -27,11 +28,26 @@ class AdminDashboardView(views.APIView):
     def get(self, request):
         days = int(request.query_params.get("days", 30))
         since = timezone.now() - timedelta(days=days)
+        today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
         total_waste_collection = WeighingRecord.objects.aggregate(w=Sum("weight_kg"))["w"] or 0
         total_waste_station = StationTransaction.objects.aggregate(w=Sum("weight_kg"))["w"] or 0
         gmv = Order.objects.exclude(status="CANCELLED").aggregate(t=Sum("total"))["t"] or 0
         revenue = Order.objects.exclude(status="CANCELLED").aggregate(c=Sum("commission_amount"))["c"] or 0
+
+        # top material by total collected weight (collections + station drop-offs combined)
+        top_collection = (
+            WeighingRecord.objects.values("material__name")
+            .annotate(w=Sum("weight_kg")).order_by("-w").first()
+        )
+        top_station = (
+            StationTransaction.objects.values("material__name")
+            .annotate(w=Sum("weight_kg")).order_by("-w").first()
+        )
+        top_material = None
+        for cand in (top_collection, top_station):
+            if cand and cand["material__name"] and (top_material is None or cand["w"] > top_material["weight_kg"]):
+                top_material = {"name": cand["material__name"], "weight_kg": float(cand["w"])}
 
         pending_breakdown = {
             "collectors": CollectorProfile.objects.filter(verification_status="PENDING").count(),
@@ -57,6 +73,10 @@ class AdminDashboardView(views.APIView):
             "completed_collections_period": CollectionRequest.objects.filter(created_at__gte=since, status=RequestStatus.COMPLETED).count(),
             "total_waste_kg": float(total_waste_collection) + float(total_waste_station),
             "orders_total": Order.objects.count(),
+            "orders_today": Order.objects.filter(created_at__gte=today_start).exclude(status="CANCELLED").count(),
+            "collection_requests_today": CollectionRequest.objects.filter(created_at__gte=today_start).count(),
+            "collectors_active_now": CollectorProfile.objects.filter(is_online=True).count(),
+            "top_material": top_material,
             "gmv_total": float(gmv),
             "platform_revenue_total": float(revenue),
             "wallet_total_balance": float(Wallet.objects.aggregate(b=Sum("balance"))["b"] or 0),
@@ -65,6 +85,68 @@ class AdminDashboardView(views.APIView):
             "active_challenges": Challenge.objects.filter(is_active=True).count(),
         }
         return Response({"success": True, "dashboard": data, "note": "برخی داده‌ها بر پایه داده نمونه (Demo Seed) محاسبه شده‌اند."})
+
+
+class MyImpactView(views.APIView):
+    """
+    "اثر من" (spec section 14) — estimates the citizen's environmental
+    contribution from their own weighed collections + station drop-offs,
+    using Material.co2_kg_saved_per_kg (an admin-configurable estimate, not
+    a scientific measurement — the frontend must always label this
+    "تخمینی" per spec).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        collection_records = WeighingRecord.objects.filter(request__citizen=user).select_related("material")
+        collection_kg = collection_records.aggregate(w=Sum("weight_kg"))["w"] or 0
+        collection_co2 = collection_records.aggregate(
+            c=Sum(F("weight_kg") * F("material__co2_kg_saved_per_kg"), output_field=DecimalField())
+        )["c"] or 0
+
+        station_records = StationTransaction.objects.filter(citizen=user).select_related("material")
+        station_kg = station_records.aggregate(w=Sum("weight_kg"))["w"] or 0
+        station_co2 = station_records.aggregate(
+            c=Sum(F("weight_kg") * F("material__co2_kg_saved_per_kg"), output_field=DecimalField())
+        )["c"] or 0
+
+        total_kg = float(collection_kg) + float(station_kg)
+        total_co2 = float(collection_co2) + float(station_co2)
+        requests_count = CollectionRequest.objects.filter(citizen=user, status=RequestStatus.COMPLETED).count()
+
+        return Response({
+            "success": True,
+            "impact": {
+                "is_estimated": True,
+                "total_kg_recycled": round(total_kg, 1),
+                "co2_kg_saved_estimated": round(total_co2, 1),
+                "completed_requests": requests_count,
+                "note": "این اعداد بر پایه ضرایب تخمینی هر ماده محاسبه شده‌اند و معیار علمی دقیق نیستند.",
+            },
+        })
+
+
+class ClassifyWasteView(views.APIView):
+    """
+    Mock AI-ready waste classification (spec section 4): the frontend opens
+    the phone camera, captures a frame, and POSTs it here (multipart
+    "image", optional). See core.ai_services.WasteClassificationService for
+    why this is a functional mock rather than a real model call.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        image_file = request.FILES.get("image")
+        image_bytes = image_file.read() if image_file else None
+        hint = request.data.get("hint", "")
+        result = WasteClassificationService().classify(image_bytes=image_bytes, hint=hint)
+        if not result.get("success"):
+            return Response(result, status=400)
+        return Response(result)
 
 
 class VerificationCenterView(views.APIView):

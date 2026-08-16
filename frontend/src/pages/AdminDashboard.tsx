@@ -5,9 +5,13 @@ import {
 } from "recharts";
 import { api } from "../api/client";
 import { useAuthStore } from "../store/auth";
-import { downloadAdminExport, useAdminCharts, useDecideVerification, useGlobalSearch, useVerificationCenter } from "../api/queries";
+import {
+  downloadAdminExport, useAdminCharts, useDecideVerification, useGlobalSearch, useVerificationCenter,
+  useAdminPricing, useSetPrice, useAllCities, useUpdateCity, useChallenges, useListings, useAdminPurchaseRequests,
+} from "../api/queries";
 import { Button, Card, CenterLoading, DemoBadge, EmptyState, TopBar } from "../components/ui";
 import { formatKg, formatNumber, formatToman } from "../lib/format";
+import brandmark from "../assets/brand/brandmark-256.png";
 
 const CHART_COLORS = { primary: "#16a34a", secondary: "#0ea5e9", danger: "#dc2626", muted: "#94a3b8" };
 
@@ -19,10 +23,12 @@ function jalaliDay(iso: string) {
   }
 }
 
+type Tab = "overview" | "verification" | "charts" | "prices" | "missions" | "cities" | "b2b" | "tools";
+
 export default function AdminDashboard() {
   const user = useAuthStore((s) => s.user);
   const isStaff = user?.is_staff;
-  const [tab, setTab] = useState<"overview" | "verification" | "charts" | "tools">("overview");
+  const [tab, setTab] = useState<Tab>("overview");
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-dashboard"],
@@ -35,75 +41,373 @@ export default function AdminDashboard() {
 
   if (isLoading || !data) return <CenterLoading />;
 
-  const kpis = isStaff
+  const groupedKpis = isStaff
     ? [
-        { label: "کل کاربران", value: formatNumber(data.total_users) },
-        { label: "جمع‌آوران", value: formatNumber(data.collectors_total) },
-        { label: "در انتظار تأیید", value: formatNumber(data.pending_verifications) },
-        { label: "ایستگاه‌های فعال", value: formatNumber(data.stations_total) },
-        { label: "مراکز بازیافت", value: formatNumber(data.recycling_centers_total) },
-        { label: "کارخانه‌ها", value: formatNumber(data.factories_total) },
-        { label: "خریداران عمده", value: formatNumber(data.wholesalers_total) },
-        { label: "کل پسماند (کیلوگرم)", value: formatKg(data.total_waste_kg) },
-        { label: "درخواست‌های جمع‌آوری", value: formatNumber(data.collection_requests_total) },
-        { label: "سفارش‌ها (GMV)", value: `${formatToman(data.gmv_total)} ت` },
-        { label: "درآمد پلتفرم", value: `${formatToman(data.platform_revenue_total)} ت` },
-        { label: "موجودی کل کیف پول‌ها", value: `${formatToman(data.wallet_total_balance)} ت` },
+        {
+          title: "کاربران و مشارکت",
+          icon: "👥",
+          items: [
+            { label: "کل کاربران", value: formatNumber(data.total_users) },
+            { label: "فعال این بازه", value: formatNumber(data.active_users_period) },
+            { label: "جمع‌آوران (کل)", value: formatNumber(data.collectors_total) },
+            { label: "جمع‌آوران آنلاین اکنون", value: formatNumber(data.collectors_active_now) },
+          ],
+        },
+        {
+          title: "عملیات امروز",
+          icon: "📦",
+          items: [
+            { label: "سفارش‌های امروز", value: formatNumber(data.orders_today) },
+            { label: "درخواست‌های امروز", value: formatNumber(data.collection_requests_today) },
+            { label: "درخواست‌های این بازه", value: formatNumber(data.collection_requests_period) },
+            { label: "تکمیل‌شده این بازه", value: formatNumber(data.completed_collections_period) },
+          ],
+        },
+        {
+          title: "پسماند و بازیافت",
+          icon: "♻️",
+          items: [
+            { label: "کل پسماند (کیلوگرم)", value: formatKg(data.total_waste_kg) },
+            { label: "پربازدیدترین ماده", value: data.top_material?.name || "—" },
+            { label: "وزن پربازدیدترین ماده", value: data.top_material ? formatKg(data.top_material.weight_kg) : "—" },
+            { label: "ایستگاه‌های فعال", value: formatNumber(data.stations_total) },
+          ],
+        },
+        {
+          title: "مالی",
+          icon: "💰",
+          items: [
+            { label: "سفارش‌ها (GMV)", value: `${formatToman(data.gmv_total)} ت` },
+            { label: "درآمد پلتفرم", value: `${formatToman(data.platform_revenue_total)} ت` },
+            { label: "موجودی کل کیف پول‌ها", value: `${formatToman(data.wallet_total_balance)} ت` },
+            { label: "در انتظار تأیید", value: formatNumber(data.pending_verifications) },
+          ],
+        },
+        {
+          title: "بازار B2B و سازمان‌ها",
+          icon: "🏭",
+          items: [
+            { label: "مراکز بازیافت", value: formatNumber(data.recycling_centers_total) },
+            { label: "کارخانه‌ها", value: formatNumber(data.factories_total) },
+            { label: "خریداران عمده", value: formatNumber(data.wholesalers_total) },
+            { label: "چالش‌های فعال", value: formatNumber(data.active_challenges) },
+          ],
+        },
       ]
     : [
-        { label: "کل پسماند بازه (کیلوگرم)", value: formatKg(data.total_waste_kg) },
-        { label: "درخواست‌های جمع‌آوری", value: formatNumber(data.collection_requests) },
-        { label: "درخواست‌های تکمیل‌شده", value: formatNumber(data.completed_requests) },
-        { label: "شهروندان فعال", value: formatNumber(data.active_participating_citizens) },
-        { label: "ایستگاه‌های فعال", value: formatNumber(data.active_stations) },
-        { label: "جمع‌آوران تأییدشده", value: formatNumber(data.approved_collectors) },
+        {
+          title: "نمای کلی شهرداری",
+          icon: "🏛️",
+          items: [
+            { label: "کل پسماند بازه (کیلوگرم)", value: formatKg(data.total_waste_kg) },
+            { label: "درخواست‌های جمع‌آوری", value: formatNumber(data.collection_requests) },
+            { label: "درخواست‌های تکمیل‌شده", value: formatNumber(data.completed_requests) },
+            { label: "شهروندان فعال", value: formatNumber(data.active_participating_citizens) },
+            { label: "ایستگاه‌های فعال", value: formatNumber(data.active_stations) },
+            { label: "جمع‌آوران تأییدشده", value: formatNumber(data.approved_collectors) },
+          ],
+        },
       ];
 
   return (
     <div>
-      <TopBar title={isStaff ? "داشبورد مدیریت سبزینو" : "داشبورد شهرداری یاسوج"} right={<DemoBadge />} />
+      <TopBar
+        title={isStaff ? "داشبورد مدیریت سبزینو" : "داشبورد شهرداری یاسوج"}
+        right={<DemoBadge />}
+      />
 
       {isStaff && (
-        <div className="px-4 mb-3 flex gap-2">
-          {([
-            ["overview", "نمای کلی"],
-            ["verification", `تأیید ثبت‌نام‌ها${data.pending_verifications ? ` (${data.pending_verifications})` : ""}`],
-            ["charts", "نمودارها"],
-            ["tools", "جستجو و خروجی"],
-          ] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`text-xs px-3 py-2 rounded-lg font-medium ${tab === key ? "bg-brand-500 text-white" : "bg-white text-ink-600 border border-brand-100"}`}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="px-4 mb-3 -mx-1 overflow-x-auto">
+          <div className="flex gap-2 px-1 w-max">
+            {([
+              ["overview", "📊 نمای کلی"],
+              ["verification", `✅ تأیید ثبت‌نام‌ها${data.pending_verifications ? ` (${data.pending_verifications})` : ""}`],
+              ["charts", "📈 نمودارها"],
+              ["prices", "🏷️ قیمت‌ها"],
+              ["missions", "🎯 ماموریت‌ها"],
+              ["cities", "🏙️ شهرها"],
+              ["b2b", "🏭 بازار B2B"],
+              ["tools", "🔎 جستجو و خروجی"],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`text-xs px-3 py-2 rounded-lg font-medium whitespace-nowrap ${tab === key ? "bg-brand-500 text-white" : "bg-white text-ink-600 border border-brand-100"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       <div className="px-4">
         {(!isStaff || tab === "overview") && (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              {kpis.map((k) => (
-                <Card key={k.label} className="p-4">
-                  <p className="text-lg font-extrabold text-brand-600">{k.value}</p>
-                  <p className="text-[11px] text-ink-500 mt-1">{k.label}</p>
-                </Card>
-              ))}
-            </div>
-            <p className="text-[11px] text-ink-400 mt-4 leading-5">
-              مدیریت کامل کاربران، جمع‌آوران، سفارش‌ها، قیمت‌ها و کمیسیون از طریق پنل ادمین جنگو (Django Admin) در آدرس{" "}
-              <code dir="ltr">/admin/</code> نیز در دسترس است.
+          <div className="flex flex-col gap-4 pb-6">
+            {isStaff && (
+              <div className="flex items-center gap-2 mb-1">
+                <img src={brandmark} alt="" className="w-6 h-6 object-contain" />
+                <p className="text-xs text-ink-500">خلاصه‌ی زنده‌ی عملکرد پلتفرم سبزینو</p>
+              </div>
+            )}
+            {groupedKpis.map((group) => (
+              <Card key={group.title} className="p-4">
+                <p className="text-sm font-bold text-ink-900 mb-3 flex items-center gap-1.5">
+                  <span>{group.icon}</span>
+                  {group.title}
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {group.items.map((k) => (
+                    <div key={k.label} className="bg-brand-50/60 rounded-xl p-3">
+                      <p className="text-base font-extrabold text-brand-700">{k.value}</p>
+                      <p className="text-[10.5px] text-ink-500 mt-1 leading-4">{k.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+            <p className="text-[11px] text-ink-400 mt-1 leading-5">
+              مدیریت کامل و پیشرفته‌ی کاربران، کمیسیون‌ها و رکوردهای خام همچنان از طریق پنل ادمین جنگو (Django Admin) در آدرس{" "}
+              <code dir="ltr">/admin/</code> نیز در دسترس است؛ تب‌های بالا میان‌بر مدیریت روزمره‌ی سبزینو هستند.
             </p>
-          </>
+          </div>
         )}
 
         {isStaff && tab === "verification" && <VerificationTab />}
         {isStaff && tab === "charts" && <ChartsTab />}
+        {isStaff && tab === "prices" && <PricesTab />}
+        {isStaff && tab === "missions" && <MissionsTab />}
+        {isStaff && tab === "cities" && <CitiesTab />}
+        {isStaff && tab === "b2b" && <B2BTab />}
         {isStaff && tab === "tools" && <ToolsTab />}
       </div>
+    </div>
+  );
+}
+
+function PricesTab() {
+  const { data, isLoading } = useAdminPricing();
+  const setPrice = useSetPrice();
+  const [editing, setEditing] = useState<number | null>(null);
+  const [buy, setBuy] = useState("");
+  const [market, setMarket] = useState("");
+
+  if (isLoading) return <CenterLoading />;
+  const rows = (data || []).filter((p) => p.active);
+
+  return (
+    <div className="flex flex-col gap-3 pb-6">
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-1">قیمت روز ضایعات</p>
+        <p className="text-[11px] text-ink-500 leading-5">
+          قیمت خرید سبزینو و قیمت مرجع بازار آزاد را برای هر ماده ویرایش کن — تغییرات بلافاصله در «قیمت روز» صفحهٔ اصلی و
+          محاسبه‌گر ارزش ضایعات اعمال می‌شود. ثبت رکورد جدید قیمت قبلی را در تاریخچه نگه می‌دارد و تراکنش‌های گذشته را تغییر نمی‌دهد.
+        </p>
+      </Card>
+      {rows.map((p) => (
+        <Card key={p.id} className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{p.material_icon || "♻️"}</span>
+              <div>
+                <p className="text-sm font-bold text-ink-900">{p.material_name}</p>
+                <p className="text-[10.5px] text-ink-400">{p.category_name} · واحد: {p.unit_display}</p>
+              </div>
+            </div>
+            {editing !== p.material && (
+              <Button
+                variant="secondary"
+                className="!py-1.5 !px-3 !text-xs"
+                onClick={() => {
+                  setEditing(p.material);
+                  setBuy(p.price_per_unit);
+                  setMarket(p.market_price || "");
+                }}
+              >
+                ویرایش
+              </Button>
+            )}
+          </div>
+
+          {editing === p.material ? (
+            <div className="mt-3 flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10.5px] text-ink-500 mb-1 block">قیمت خرید سبزینو (تومان)</label>
+                  <input
+                    className="w-full rounded-lg border border-brand-100 px-2.5 py-2 text-xs"
+                    inputMode="numeric"
+                    value={buy}
+                    onChange={(e) => setBuy(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10.5px] text-ink-500 mb-1 block">قیمت مرجع بازار (تومان، اختیاری)</label>
+                  <input
+                    className="w-full rounded-lg border border-brand-100 px-2.5 py-2 text-xs"
+                    inputMode="numeric"
+                    value={market}
+                    onChange={(e) => setMarket(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1 !py-2 !text-xs"
+                  loading={setPrice.isPending}
+                  onClick={() => {
+                    setPrice.mutate(
+                      { material: p.material, price_per_unit: Number(buy), market_price: market ? Number(market) : null },
+                      { onSuccess: () => setEditing(null) },
+                    );
+                  }}
+                >
+                  ثبت قیمت جدید
+                </Button>
+                <Button variant="secondary" className="flex-1 !py-2 !text-xs" onClick={() => setEditing(null)}>
+                  انصراف
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              <div className="bg-brand-50/60 rounded-lg p-2 text-center">
+                <p className="text-xs font-bold text-brand-700">{formatToman(p.price_per_unit)}</p>
+                <p className="text-[9.5px] text-ink-500 mt-0.5">خرید سبزینو</p>
+              </div>
+              <div className="bg-slate-50 rounded-lg p-2 text-center">
+                <p className="text-xs font-bold text-ink-700">{p.market_price ? formatToman(p.market_price) : "—"}</p>
+                <p className="text-[9.5px] text-ink-500 mt-0.5">قیمت بازار</p>
+              </div>
+              <div className="bg-slate-50 rounded-lg p-2 text-center">
+                <p className="text-[10px] font-bold text-ink-700">{new Date(p.effective_from).toLocaleDateString("fa-IR")}</p>
+                <p className="text-[9.5px] text-ink-500 mt-0.5">آخرین بروزرسانی</p>
+              </div>
+            </div>
+          )}
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function MissionsTab() {
+  const { data, isLoading } = useChallenges();
+  if (isLoading) return <CenterLoading />;
+  if (!data?.length) return <EmptyState icon="🎯" title="هنوز ماموریتی ثبت نشده" />;
+
+  const TYPE_LABELS: Record<string, string> = {
+    WEIGHT: "بر اساس وزن", TRANSACTIONS: "بر اساس تعداد تراکنش", STREAK: "بر اساس پیوستگی",
+    REFERRAL: "بر اساس دعوت", NEIGHBORHOOD: "بر اساس محله",
+  };
+
+  return (
+    <div className="flex flex-col gap-3 pb-6">
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-1">ماموریت‌های سبز فعال</p>
+        <p className="text-[11px] text-ink-500 leading-5">
+          ساخت و ویرایش ماموریت جدید از پنل ادمین جنگو (مدل Challenge) انجام می‌شود؛ این‌جا فقط نمای زنده‌ی ماموریت‌های در حال اجراست.
+        </p>
+      </Card>
+      {data.map((c) => (
+        <Card key={c.id} className="p-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-bold text-ink-900">{c.title}</p>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full ${c.is_active ? "bg-brand-50 text-brand-700" : "bg-slate-100 text-ink-500"}`}>
+              {c.is_active ? "فعال" : "غیرفعال"}
+            </span>
+          </div>
+          {c.description && <p className="text-xs text-ink-500 mt-1">{c.description}</p>}
+          <div className="flex items-center gap-3 mt-2 text-[11px] text-ink-500">
+            <span>{TYPE_LABELS[c.type] || c.type}</span>
+            <span>هدف: {formatNumber(c.target_value)}</span>
+            <span className="text-brand-600 font-medium">🌿 {formatNumber(c.reward_points)} امتیاز</span>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function CitiesTab() {
+  const { data, isLoading } = useAllCities();
+  const updateCity = useUpdateCity();
+
+  if (isLoading) return <CenterLoading />;
+
+  return (
+    <div className="flex flex-col gap-3 pb-6">
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-1">هویت محلی شهرها</p>
+        <p className="text-[11px] text-ink-500 leading-5">
+          فقط شهرهایی که «فعال» هستند، در صفحهٔ اصلی هویت بصری اختصاصی (پس‌زمینه و شعار محلی) نشان می‌دهند.
+        </p>
+      </Card>
+      {(data || []).map((city) => (
+        <Card key={city.id} className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{city.landmark_icon || "🏙️"}</span>
+              <div>
+                <p className="text-sm font-bold text-ink-900">{city.name}</p>
+                <p className="text-[10.5px] text-ink-400">{city.landmark_name || "بدون لندمارک ثبت‌شده"}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => updateCity.mutate({ id: city.id, payload: { has_identity: !city.has_identity } })}
+              className={`text-[11px] px-3 py-1.5 rounded-lg font-medium ${city.has_identity ? "bg-brand-500 text-white" : "bg-slate-100 text-ink-600"}`}
+            >
+              {city.has_identity ? "فعال" : "غیرفعال"}
+            </button>
+          </div>
+          {city.hero_tagline && <p className="text-[11px] text-ink-500 mt-2">«{city.hero_tagline}»</p>}
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function B2BTab() {
+  const { data: listings, isLoading: listingsLoading } = useListings();
+  const { data: purchaseRequests, isLoading: prLoading } = useAdminPurchaseRequests();
+
+  return (
+    <div className="flex flex-col gap-4 pb-6">
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-2">آگهی‌های فروش (بازار عمده)</p>
+        {listingsLoading ? (
+          <CenterLoading />
+        ) : !listings?.length ? (
+          <p className="text-xs text-ink-400">آگهی‌ای ثبت نشده است.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {listings.slice(0, 15).map((l) => (
+              <div key={l.uid} className="text-xs py-2 border-t border-brand-50 flex items-center justify-between">
+                <span>{l.material_detail?.name} — {formatKg(l.quantity_kg)} — {l.location || "—"}</span>
+                <span className="text-brand-600 font-medium">{formatToman(l.price_per_kg)} ت/کیلو</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-2">درخواست‌های خرید (بازار معکوس)</p>
+        {prLoading ? (
+          <CenterLoading />
+        ) : !purchaseRequests?.length ? (
+          <p className="text-xs text-ink-400">درخواستی ثبت نشده است.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {purchaseRequests.slice(0, 15).map((pr: any) => (
+              <div key={pr.uid} className="text-xs py-2 border-t border-brand-50 flex items-center justify-between">
+                <span>{pr.material_detail?.name || pr.material} — {formatKg(pr.quantity_kg)}</span>
+                <span className="text-ink-500">{pr.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

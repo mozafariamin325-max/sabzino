@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useLogin } from "../api/queries";
 import { Button, Card } from "../components/ui";
+import brandmark from "../assets/brand/brandmark-256.png";
 
 export default function Login() {
   const [identifier, setIdentifier] = useState("");
@@ -23,7 +24,9 @@ export default function Login() {
     <div className="min-h-dvh flex flex-col justify-center px-6 bg-gradient-to-b from-brand-600 via-brand-600 to-brand-50">
       <div className="max-w-sm mx-auto w-full">
         <div className="flex flex-col items-center mb-8 animate-fade-up">
-          <div className="w-16 h-16 rounded-2xl bg-white/15 flex items-center justify-center text-3xl mb-3">♻️</div>
+          <div className="w-20 h-20 rounded-2xl bg-white/15 flex items-center justify-center p-2 mb-3">
+            <img src={brandmark} alt="سبزینو" className="w-full h-full object-contain" />
+          </div>
           <h1 className="text-2xl font-bold text-white">سبزینو</h1>
           <p className="text-brand-50 text-sm mt-1">با بازیافت، آینده را سبز کنیم</p>
         </div>

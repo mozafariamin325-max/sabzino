@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useRegister } from "../api/queries";
 import { Button, Card } from "../components/ui";
+import brandmark from "../assets/brand/brandmark-256.png";
 
 export default function Register() {
   const [customerType, setCustomerType] = useState<"INDIVIDUAL" | "ORGANIZATION">("INDIVIDUAL");
@@ -30,7 +31,9 @@ export default function Register() {
     <div className="min-h-dvh flex flex-col justify-center px-6 py-10 bg-gradient-to-b from-brand-600 via-brand-600 to-brand-50">
       <div className="max-w-sm mx-auto w-full">
         <div className="flex flex-col items-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center text-2xl mb-2">♻️</div>
+          <div className="w-16 h-16 rounded-2xl bg-white/15 flex items-center justify-center p-2 mb-2">
+            <img src={brandmark} alt="سبزینو" className="w-full h-full object-contain" />
+          </div>
           <h1 className="text-xl font-bold text-white">ساخت حساب سبزینو</h1>
         </div>
 

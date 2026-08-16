@@ -1,15 +1,21 @@
 import { Link } from "react-router-dom";
 import { useAuthStore } from "../store/auth";
-import { useGreenPoints, useMyRequests, useNotifications, useWallet } from "../api/queries";
+import {
+  useActiveIdentityCity, useGreenPoints, useMyRequests, useNotifications, usePricing, useWallet,
+} from "../api/queries";
 import { Card, CenterLoading, DemoBadge, StatusPill } from "../components/ui";
 import { formatKg, formatToman, toJalali } from "../lib/format";
 import { STATUS_LABELS } from "../api/types";
+import { curatedHomePrices } from "../lib/homePrices";
+import brandmark from "../assets/brand/brandmark-256.png";
 
 const SERVICES = [
   { to: "/requests/new", label: "درخواست جمع‌آوری", icon: "🚚", bg: "bg-brand-50" },
-  { to: "/materials", label: "دسته‌بندی و قیمت‌ها", icon: "♻️", bg: "bg-sky-50" },
+  { to: "/scan", label: "تشخیص با دوربین", icon: "📷", bg: "bg-rose-50" },
   { to: "/stations", label: "مراکز بازیافت نزدیک", icon: "📍", bg: "bg-amber-50" },
   { to: "/marketplace", label: "فروشگاه سبزینو", icon: "🛍️", bg: "bg-violet-50" },
+  { to: "/missions", label: "ماموریت‌های سبز", icon: "🎯", bg: "bg-emerald-50" },
+  { to: "/materials", label: "دسته‌بندی و قیمت‌ها", icon: "♻️", bg: "bg-sky-50" },
 ];
 
 export default function Home() {
@@ -18,9 +24,12 @@ export default function Home() {
   const { data: points } = useGreenPoints();
   const { data: requests } = useMyRequests();
   const { data: notifications } = useNotifications();
+  const { data: prices } = usePricing();
+  const { data: city } = useActiveIdentityCity();
   const unread = (notifications || []).filter((n: { is_read: boolean }) => !n.is_read).length;
 
   const totalKg = (requests || []).reduce((sum, r) => sum + (r.weighing ? Number(r.weighing.weight_kg) : 0), 0);
+  const homePrices = curatedHomePrices(prices);
 
   return (
     <div>
@@ -35,7 +44,7 @@ export default function Home() {
         </Link>
         <div className="text-center">
           <div className="flex items-center gap-1.5 justify-center">
-            <span className="text-xl">♻️</span>
+            <img src={brandmark} alt="" className="w-6 h-6 object-contain" />
             <h1 className="text-lg font-extrabold text-brand-700">سبزینو</h1>
           </div>
           <p className="text-[11px] text-ink-500">با بازیافت، آینده را سبز کنیم</p>
@@ -44,6 +53,25 @@ export default function Home() {
           {user?.first_name?.[0] || "س"}
         </Link>
       </div>
+
+      {city?.has_identity && (
+        <div className="px-4 mt-1">
+          <div
+            className="rounded-2xl px-4 py-3 flex items-center gap-3 text-white shadow-sm animate-fade-up"
+            style={{
+              background: `linear-gradient(90deg, ${city.theme_color_from || "#0b3d24"}, ${city.theme_color_to || "#178a49"})`,
+            }}
+          >
+            <span className="text-2xl">{city.landmark_icon || "🏙️"}</span>
+            <div className="min-w-0">
+              <p className="text-xs font-bold truncate">
+                سبزینو در {city.name}{city.landmark_name ? ` — ${city.landmark_name}` : ""}
+              </p>
+              {city.hero_tagline && <p className="text-[10.5px] text-white/85 truncate mt-0.5">{city.hero_tagline}</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="px-4 mt-2">
         <div className="rounded-3xl bg-gradient-to-l from-brand-600 to-brand-500 p-5 text-white shadow-lg animate-fade-up">
@@ -86,13 +114,45 @@ export default function Home() {
 
       <div className="px-4 mt-5">
         <Link
-          to="/requests/new"
-          className="block rounded-2xl bg-gradient-to-l from-emerald-800 to-brand-700 p-4 text-white relative overflow-hidden"
+          to="/calculator"
+          className="block rounded-2xl bg-gradient-to-l from-brand-700 to-emerald-800 p-4 text-white relative overflow-hidden"
         >
-          <p className="font-bold text-sm relative z-10">تفکیک از مبدأ، دوستدار محیط زیست</p>
-          <p className="text-xs text-brand-50/90 mt-1 relative z-10">همین حالا درخواست جمع‌آوری ثبت کن ♻️</p>
-          <span className="absolute -left-2 -bottom-2 text-6xl opacity-20">🗑️</span>
+          <p className="font-bold text-sm relative z-10">ضایعاتت چقدر می‌ارزه؟</p>
+          <p className="text-xs text-brand-50/90 mt-1 relative z-10">نوع و وزن ضایعات رو انتخاب کن، ارزشش رو همین الان ببین 💰</p>
+          <span className="absolute -left-2 -bottom-2 text-6xl opacity-20">🧮</span>
         </Link>
+      </div>
+
+      <div className="px-4 mt-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-bold text-sm text-ink-900">قیمت روز ضایعات</h2>
+          <Link to="/materials" className="text-xs text-brand-600 font-medium">
+            مشاهده همه
+          </Link>
+        </div>
+        {!prices ? (
+          <CenterLoading />
+        ) : homePrices.length === 0 ? (
+          <Card className="p-4 text-center text-xs text-ink-500">قیمتی برای نمایش ثبت نشده است.</Card>
+        ) : (
+          <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4">
+            {homePrices.map((p) => (
+              <Card key={p.id} className="p-3 flex-shrink-0 w-[132px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base">{p.material_icon || "♻️"}</span>
+                  <p className="text-xs font-bold text-ink-900 truncate">{p.label}</p>
+                </div>
+                <p className="text-sm font-extrabold text-brand-600 mt-2">
+                  {formatToman(p.price_per_unit)} <span className="text-[10px] font-normal text-ink-500">ت/{p.unit_display}</span>
+                </p>
+                {p.market_price && (
+                  <p className="text-[10px] text-ink-400 mt-0.5 line-through">بازار: {formatToman(p.market_price)} ت</p>
+                )}
+                <p className="text-[9.5px] text-ink-400 mt-1.5">{new Date(p.effective_from).toLocaleDateString("fa-IR")}</p>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="px-4 mt-5">

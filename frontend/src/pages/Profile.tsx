@@ -1,15 +1,30 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/auth";
-import { useGreenPoints, useProfileChangeRequests, useQRCode, useUpdateMe } from "../api/queries";
+import { useGreenPoints, useMyImpact, useProfileChangeRequests, useQRCode, useUpdateMe } from "../api/queries";
 import { Button, Card, TopBar } from "../components/ui";
 import RoleSwitcher from "../components/RoleSwitcher";
 import { getAvailableViews } from "../lib/roles";
+import { formatKg, formatNumber } from "../lib/format";
+
+const XP_PER_LEVEL = 500;
+
+const TIERS = [
+  { min: 1, max: 1, name: "تازه‌کار", icon: "🌱", color: "text-slate-600 bg-slate-100" },
+  { min: 2, max: 4, name: "دوستدار طبیعت", icon: "🌿", color: "text-brand-700 bg-brand-50" },
+  { min: 5, max: 9, name: "قهرمان سبز", icon: "🏅", color: "text-amber-700 bg-amber-50" },
+  { min: 10, max: Infinity, name: "سفیر سبزینو", icon: "👑", color: "text-violet-700 bg-violet-50" },
+];
+
+function tierForLevel(level: number) {
+  return TIERS.find((t) => level >= t.min && level <= t.max) || TIERS[0];
+}
 
 export default function Profile() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { data: points } = useGreenPoints();
+  const { data: impact } = useMyImpact();
   const { data: pendingChanges } = useProfileChangeRequests();
   const updateMe = useUpdateMe();
   const navigate = useNavigate();
@@ -43,16 +58,73 @@ export default function Profile() {
               {user?.first_name} {user?.last_name}
             </p>
             <p className="text-xs text-ink-500 mt-0.5">{user?.phone_number || user?.email}</p>
-            {points && (
-              <p className="text-xs text-brand-600 mt-1">
-                سطح {points.level} — {points.points} امتیاز سبزینو 🌿
-              </p>
-            )}
           </div>
           <button className="text-xs text-brand-600 font-medium" onClick={() => setEditing((e) => !e)}>
             {editing ? "انصراف" : "ویرایش"}
           </button>
         </Card>
+
+        {points && (
+          <Card className="p-4 mt-3">
+            {(() => {
+              const tier = tierForLevel(points.level);
+              const withinLevel = ((points.xp % XP_PER_LEVEL) + XP_PER_LEVEL) % XP_PER_LEVEL;
+              const pct = Math.min(100, Math.round((withinLevel / XP_PER_LEVEL) * 100));
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg ${tier.color}`}>
+                        {tier.icon}
+                      </span>
+                      <div>
+                        <p className="text-sm font-bold text-ink-900">{tier.name}</p>
+                        <p className="text-[11px] text-ink-500 mt-0.5">سطح {formatNumber(points.level)}</p>
+                      </div>
+                    </div>
+                    <p className="text-sm font-bold text-brand-600">{formatNumber(points.points)} 🌿</p>
+                  </div>
+                  <div className="mt-3">
+                    <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                      <div className="h-full bg-brand-500 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <p className="text-[10.5px] text-ink-400 mt-1.5">
+                      {formatNumber(withinLevel)} از {formatNumber(XP_PER_LEVEL)} امتیاز تجربه تا سطح بعد
+                    </p>
+                  </div>
+                </>
+              );
+            })()}
+          </Card>
+        )}
+
+        {impact && (
+          <Card className="p-4 mt-3">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-bold text-ink-900">اثر من بر محیط‌زیست</p>
+              {impact.is_estimated && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                  تخمینی
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center">
+                <p className="text-base font-extrabold text-brand-600">{formatKg(impact.total_kg_recycled)}</p>
+                <p className="text-[10.5px] text-ink-500 mt-0.5">کیلوگرم بازیافت</p>
+              </div>
+              <div className="text-center">
+                <p className="text-base font-extrabold text-brand-600">{formatKg(impact.co2_kg_saved_estimated)}</p>
+                <p className="text-[10.5px] text-ink-500 mt-0.5">کیلوگرم CO₂ کاهش‌یافته</p>
+              </div>
+              <div className="text-center">
+                <p className="text-base font-extrabold text-brand-600">{formatNumber(impact.completed_requests)}</p>
+                <p className="text-[10.5px] text-ink-500 mt-0.5">درخواست تکمیل‌شده</p>
+              </div>
+            </div>
+            {impact.note && <p className="text-[10.5px] text-ink-400 mt-3">{impact.note}</p>}
+          </Card>
+        )}
 
         {editing && (
           <Card className="p-4 mt-3 flex flex-col gap-2.5">

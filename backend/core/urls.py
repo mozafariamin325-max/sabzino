@@ -2,7 +2,7 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
     AdminDashboardView, ChartsView, VerificationCenterView, RatingViewSet,
-    QRCodeView, GlobalSearchView, AdminExportView,
+    QRCodeView, GlobalSearchView, AdminExportView, MyImpactView, ClassifyWasteView,
 )
 
 router = DefaultRouter()
@@ -15,4 +15,6 @@ urlpatterns = [
     path("qr/", QRCodeView.as_view(), name="qr-code"),
     path("search/", GlobalSearchView.as_view(), name="global-search"),
     path("export/", AdminExportView.as_view(), name="admin-export"),
+    path("impact/me/", MyImpactView.as_view(), name="impact-me"),
+    path("classify-waste/", ClassifyWasteView.as_view(), name="classify-waste"),
 ] + router.urls

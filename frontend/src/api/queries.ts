@@ -6,6 +6,8 @@ import type {
   Paginated, RecyclingStation, Wallet, WalletTransaction, OrganizationDetail,
   ProfileChangeRequest, RecurringSchedule, OrgProfile, InventoryMovement, StockRow,
   VerificationItem, Rating, GlobalSearchResult,
+  MaterialPrice, City, Challenge, LeaderboardRow, NeighborhoodLeaderboardRow,
+  MyImpact, ClassifyResult, NearbyCollector,
 } from "./types";
 
 // ---------------- AUTH ----------------
@@ -251,6 +253,120 @@ export function useStations(coords?: { lat: number; lng: number }) {
   });
 }
 
+export function useNearbyCollectorsMap(coords?: { lat: number; lng: number }) {
+  return useQuery({
+    queryKey: ["nearby-collectors-map", coords],
+    queryFn: async () => {
+      const params = coords ? { lat: coords.lat, lng: coords.lng } : {};
+      const { data } = await api.get<{ collectors: NearbyCollector[] }>("/collectors/nearby/", { params });
+      return data.collectors;
+    },
+  });
+}
+
+// ---------------- PRICING ("قیمت روز") ----------------
+export function usePricing() {
+  return useQuery({
+    queryKey: ["pricing"],
+    queryFn: async () =>
+      (await api.get<Paginated<MaterialPrice> | MaterialPrice[]>("/pricing/", { params: { active: true } })).data,
+    select: (data) => (Array.isArray(data) ? data : data.results),
+    staleTime: 60_000,
+  });
+}
+
+// ---------------- CITIES / LOCAL IDENTITY ----------------
+export function useActiveIdentityCity() {
+  return useQuery({
+    queryKey: ["cities", "active-identity"],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<City> | City[]>("/locations/cities/", {
+        params: { has_identity: true },
+      });
+      const list = Array.isArray(data) ? data : data.results;
+      return list[0] || null;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useAllCities() {
+  return useQuery({
+    queryKey: ["cities", "all"],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<City> | City[]>("/locations/cities/");
+      return Array.isArray(data) ? data : data.results;
+    },
+  });
+}
+
+export function useUpdateCity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: number; payload: Partial<City> }) =>
+      (await api.patch(`/locations/cities/${id}/`, payload)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cities"] });
+    },
+  });
+}
+
+// ---------------- ADMIN: PRICES ----------------
+export function useAdminPricing() {
+  return useQuery({
+    queryKey: ["pricing", "admin-all"],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<MaterialPrice> | MaterialPrice[]>("/pricing/");
+      return Array.isArray(data) ? data : data.results;
+    },
+  });
+}
+
+export function useSetPrice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { material: number; price_per_unit: number; market_price?: number | null }) =>
+      (await api.post("/pricing/", payload)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pricing"] });
+    },
+  });
+}
+
+// ---------------- ADMIN: B2B PURCHASE REQUESTS ----------------
+export function useAdminPurchaseRequests() {
+  return useQuery({
+    queryKey: ["purchase-requests", "admin-all"],
+    queryFn: async () => {
+      const { data } = await api.get("/marketplace/purchase-requests/");
+      return Array.isArray(data) ? data : data.results;
+    },
+  });
+}
+
+// ---------------- ENVIRONMENTAL IMPACT ("اثر من") ----------------
+export function useMyImpact() {
+  return useQuery({
+    queryKey: ["my-impact"],
+    queryFn: async () => (await api.get<{ impact: MyImpact }>("/impact/me/")).data.impact,
+  });
+}
+
+// ---------------- AI WASTE CLASSIFICATION (mock) ----------------
+export function useClassifyWaste() {
+  return useMutation({
+    mutationFn: async ({ image, hint }: { image?: Blob; hint?: string }) => {
+      const form = new FormData();
+      if (image) form.append("image", image, "capture.jpg");
+      if (hint) form.append("hint", hint);
+      const { data } = await api.post<ClassifyResult>("/classify-waste/", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return data;
+    },
+  });
+}
+
 // ---------------- WALLET & POINTS ----------------
 export function useWallet() {
   return useQuery({
@@ -290,7 +406,24 @@ export function useGreenPoints() {
 export function useLeaderboard() {
   return useQuery({
     queryKey: ["leaderboard"],
-    queryFn: async () => (await api.get("/rewards/leaderboard/")).data.leaderboard,
+    queryFn: async () => (await api.get<{ leaderboard: LeaderboardRow[] }>("/rewards/leaderboard/")).data.leaderboard,
+  });
+}
+
+export function useNeighborhoodLeaderboard() {
+  return useQuery({
+    queryKey: ["leaderboard", "neighborhoods"],
+    queryFn: async () =>
+      (await api.get<{ leaderboard: NeighborhoodLeaderboardRow[] }>("/rewards/leaderboard/neighborhoods/")).data
+        .leaderboard,
+  });
+}
+
+export function useChallenges() {
+  return useQuery({
+    queryKey: ["challenges"],
+    queryFn: async () => (await api.get<Paginated<Challenge> | Challenge[]>("/rewards/challenges/")).data,
+    select: (data) => (Array.isArray(data) ? data : data.results),
   });
 }
 
@@ -419,6 +552,18 @@ export function useListings(params?: Record<string, string>) {
   return useQuery({
     queryKey: ["listings", params],
     queryFn: async () => (await api.get<Paginated<Listing>>("/marketplace/listings/", { params })).data.results,
+  });
+}
+
+export function usePurchaseListing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ uid, quantity_kg }: { uid: string; quantity_kg: number }) => {
+      const { data } = await api.post(`/marketplace/listings/${uid}/purchase/`, { quantity_kg });
+      if (data?.success === false) throw new Error(data.message || "خطا در ثبت درخواست خرید");
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["listings"] }),
   });
 }
 

@@ -20,7 +20,7 @@ class CityViewSet(viewsets.ModelViewSet):
     queryset = City.objects.all()
     serializer_class = CitySerializer
     permission_classes = [ReadOnlyOrAdmin]
-    filterset_fields = ["province"]
+    filterset_fields = ["province", "has_identity"]
 
 
 class DistrictViewSet(viewsets.ModelViewSet):
