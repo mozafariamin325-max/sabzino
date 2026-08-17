@@ -11,12 +11,19 @@ class MaterialSerializer(serializers.ModelSerializer):
         fields = (
             "id", "name", "slug", "category", "category_name", "unit", "description",
             "icon", "is_active", "accepted_at_stations", "co2_kg_saved_per_kg", "current_price",
+            "requires_appraisal",
         )
 
 
 class MaterialCategorySerializer(serializers.ModelSerializer):
-    materials = MaterialSerializer(many=True, read_only=True)
+    # SerializerMethodField (not a plain nested serializer) so retired/superseded
+    # materials (is_active=False) never leak into the catalog shown to citizens.
+    materials = serializers.SerializerMethodField()
 
     class Meta:
         model = MaterialCategory
         fields = ("id", "name", "icon", "order", "materials")
+
+    def get_materials(self, obj):
+        active_materials = obj.materials.filter(is_active=True).order_by("name")
+        return MaterialSerializer(active_materials, many=True).data

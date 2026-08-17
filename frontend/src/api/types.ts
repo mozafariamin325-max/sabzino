@@ -11,6 +11,7 @@ export interface Material {
   accepted_at_stations: boolean;
   co2_kg_saved_per_kg: string;
   current_price: string | null;
+  requires_appraisal: boolean;
 }
 
 export interface MaterialCategory {

@@ -158,7 +158,13 @@ export default function RequestWizard() {
                             <button type="button" onClick={() => toggleMaterial(m.id)} className="w-full text-right flex items-center justify-between">
                               <span>
                                 <p className="font-medium text-ink-900">{m.name}</p>
-                                <p className="text-[11px] text-ink-500 mt-0.5">{formatToman(m.current_price)} تومان/کیلو</p>
+                                <p className="text-[11px] mt-0.5">
+                                  {m.requires_appraisal || !m.current_price ? (
+                                    <span className="text-amber-700">قیمت پس از کارشناسی</span>
+                                  ) : (
+                                    <span className="text-ink-500">{formatToman(m.current_price)} تومان/کیلو</span>
+                                  )}
+                                </p>
                               </span>
                               <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selected ? "border-brand-500 bg-brand-500 text-white" : "border-brand-200"}`}>
                                 {selected && "✓"}
@@ -373,7 +379,10 @@ export default function RequestWizard() {
             <ul className="mb-3 mt-1">
               {selectedMaterialObjs.map((m) => (
                 <li key={m.id} className="flex justify-between text-sm py-1 border-b border-brand-50 last:border-0">
-                  <span className="text-ink-800">{m.name}</span>
+                  <span className="text-ink-800">
+                    {m.name}
+                    {m.requires_appraisal && <span className="text-amber-700 text-[10.5px]"> (کارشناسی)</span>}
+                  </span>
                   <span className="text-ink-600">{items[m.id].weightKg} کیلوگرم {items[m.id].isExact ? "(دقیق)" : "(تقریبی)"}</span>
                 </li>
               ))}

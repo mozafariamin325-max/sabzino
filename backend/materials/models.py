@@ -30,6 +30,11 @@ class Material(TimeStampedModel):
         max_digits=6, decimal_places=3, default=0,
         help_text="Configurable estimate used for the environmental-impact widgets (not scientific fact).",
     )
+    requires_appraisal = models.BooleanField(
+        default=False,
+        help_text="No fixed per-kg price — value depends on inspection (e.g. mixed e-waste boards, tires). "
+                   "Frontend shows 'قیمت پس از کارشناسی' instead of a number.",
+    )
 
     class Meta:
         ordering = ["name"]

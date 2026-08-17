@@ -1,0 +1,167 @@
+from decimal import Decimal
+from datetime import timedelta
+from math import radians, sin, cos, sqrt, atan2
+from django.db import transaction
+from django.utils import timezone
+from .models import CollectionRequest, CollectionStatusLog, CollectionAssignment, RequestStatus, WeighingRecord
+
+# rough midpoint (kg) used only for the "estimated value" shown to the citizen before weighing
+AMOUNT_RANGE_MIDPOINT = {
+    "UNDER_5": Decimal("3"), "R5_10": Decimal("7.5"), "R10_20": Decimal("15"),
+    "R20_50": Decimal("35"), "R50_100": Decimal("75"), "OVER_100": Decimal("120"),
+}
+
+
+def estimate_value(materials_qs, amount_range: str) -> Decimal:
+    prices = [m.current_price for m in materials_qs if m.current_price]
+    if not prices:
+        return Decimal("0")
+    avg_price = sum(prices) / len(prices)
+    kg = AMOUNT_RANGE_MIDPOINT.get(amount_range, Decimal("5"))
+    return (avg_price * kg).quantize(Decimal("1"))
+
+
+def estimate_value_for_items(items) -> Decimal:
+    """items: iterable of (material, weight_kg) — used by the multi-material wizard."""
+    total = Decimal("0")
+    for material, weight_kg in items:
+        price = material.current_price or Decimal("0")
+        total += price * Decimal(str(weight_kg))
+    return total.quantize(Decimal("1"))
+
+
+def log_status(request: CollectionRequest, status: str, note: str = "", changed_by=None):
+    request.status = status
+    request.save(update_fields=["status", "updated_at"])
+    CollectionStatusLog.objects.create(request=request, status=status, note=note, changed_by=changed_by)
+
+
+def haversine_km(lat1, lng1, lat2, lng2):
+    if None in (lat1, lng1, lat2, lng2):
+        return 9999
+    r = 6371
+    lat1, lng1, lat2, lng2 = map(radians, [float(lat1), float(lng1), float(lat2), float(lng2)])
+    dlat, dlng = lat2 - lat1, lng2 - lng1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlng / 2) ** 2
+    return r * 2 * atan2(sqrt(a), sqrt(1 - a))
+
+
+def find_nearby_open_requests(collector_profile, limit=20):
+    """
+    MVP dispatch algorithm (spec section 11): online + approved collectors see
+    open (SEARCHING_COLLECTOR) requests ranked by distance. Simple now;
+    architecture leaves room for a smarter matching service later.
+    """
+    open_requests = CollectionRequest.objects.filter(status=RequestStatus.SEARCHING_COLLECTOR).select_related("citizen")
+    scored = []
+    for req in open_requests:
+        dist = haversine_km(collector_profile.current_lat, collector_profile.current_lng, req.lat, req.lng)
+        scored.append((dist, req))
+    scored.sort(key=lambda x: x[0])
+    return [req for _, req in scored[:limit]]
+
+
+@transaction.atomic
+def accept_request(collector_profile, request_obj: CollectionRequest):
+    if request_obj.status != RequestStatus.SEARCHING_COLLECTOR:
+        raise ValueError("این درخواست دیگر در دسترس نیست.")
+    assignment = CollectionAssignment.objects.create(
+        request=request_obj, collector=collector_profile, accepted_at=timezone.now()
+    )
+    log_status(request_obj, RequestStatus.ACCEPTED, note="جمع‌آور پذیرفت", changed_by=collector_profile.user)
+    return assignment
+
+
+@transaction.atomic
+def complete_weighing(request_obj: CollectionRequest, material, weight_kg: Decimal, weighed_by=None) -> WeighingRecord:
+    from core.services import get_points_per_kg
+    from wallet.services import credit_wallet
+    from rewards.services import award_points
+    from wallet.models import WalletTransactionType
+
+    unit_price = material.current_price or Decimal("0")
+    total_value = (unit_price * weight_kg).quantize(Decimal("1"))
+    points = int((get_points_per_kg() * weight_kg).quantize(Decimal("1")))
+
+    record = WeighingRecord.objects.create(
+        request=request_obj, material=material, weight_kg=weight_kg,
+        unit_price_snapshot=unit_price, total_value=total_value,
+        points_awarded=points, weighed_by=weighed_by,
+    )
+    credit_wallet(
+        request_obj.citizen, total_value, WalletTransactionType.CREDIT,
+        description=f"بابت تحویل {weight_kg} کیلوگرم {material.name}", reference=request_obj.code,
+    )
+    award_points(request_obj.citizen, points, "COLLECTION", description=f"تحویل پسماند {request_obj.code}", reference=request_obj.code)
+
+    assignment = getattr(request_obj, "assignment", None)
+    if assignment:
+        assignment.collected_at = assignment.collected_at or timezone.now()
+        assignment.save(update_fields=["collected_at"])
+        collector = assignment.collector
+        collector.completed_jobs += 1
+        collector.save(update_fields=["completed_jobs"])
+
+    log_status(request_obj, RequestStatus.COMPLETED, note="وزن‌کشی و تسویه انجام شد", changed_by=weighed_by)
+    return record
+
+
+def _advance_next_run_date(schedule, today):
+    from .models import RecurrenceFrequency
+
+    if schedule.frequency == RecurrenceFrequency.WEEKLY:
+        return today + timedelta(days=7)
+    if schedule.frequency == RecurrenceFrequency.BIWEEKLY:
+        return today + timedelta(days=14)
+    # MONTHLY: jump ~1 month, clamped to a valid day
+    year = today.year + (1 if today.month == 12 else 0)
+    month = 1 if today.month == 12 else today.month + 1
+    day = min(schedule.day_of_month or today.day, 28)
+    from datetime import date
+
+    return date(year, month, day)
+
+
+@transaction.atomic
+def generate_due_recurring_requests(today=None):
+    """
+    Run daily (management command generate_recurring_requests, wired to a free
+    PythonAnywhere scheduled task). Creates a real CollectionRequest + items
+    for every active RecurringSchedule whose next_run_date has arrived, then
+    advances the schedule (spec ask: جمع‌آوری هفتگی/ماهانه خودکار).
+    """
+    from datetime import datetime, time
+    from .models import RecurringSchedule, CollectionRequestItem
+
+    today = today or timezone.localdate()
+    due = RecurringSchedule.objects.filter(is_active=True, next_run_date__lte=today).select_related("citizen", "address")
+    created = []
+    for schedule in due:
+        materials = list(schedule.materials.all())
+        if not materials:
+            schedule.next_run_date = _advance_next_run_date(schedule, today)
+            schedule.save(update_fields=["next_run_date", "updated_at"])
+            continue
+        preferred_dt = timezone.make_aware(datetime.combine(today, time(hour=schedule.preferred_hour or 9)))
+        req = CollectionRequest.objects.create(
+            citizen=schedule.citizen,
+            address=schedule.address,
+            address_text_snapshot=schedule.address.full_address,
+            lat=schedule.address.lat,
+            lng=schedule.address.lng,
+            preferred_time=preferred_dt,
+            description="ایجاد خودکار از جمع‌آوری دوره‌ای",
+        )
+        req.materials.set(materials)
+        default_weight = Decimal("5")
+        for m in materials:
+            CollectionRequestItem.objects.create(request=req, material=m, weight_kg=default_weight, is_exact=False)
+        req.estimated_value = estimate_value_for_items([(m, default_weight) for m in materials])
+        req.save(update_fields=["estimated_value"])
+        log_status(req, RequestStatus.SEARCHING_COLLECTOR, note="درخواست دوره‌ای خودکار", changed_by=schedule.citizen)
+
+        schedule.last_generated_request = req
+        schedule.next_run_date = _advance_next_run_date(schedule, today)
+        schedule.save(update_fields=["last_generated_request", "next_run_date", "updated_at"])
+        created.append(req)
+    return created

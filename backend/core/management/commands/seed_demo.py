@@ -116,64 +116,190 @@ class Command(BaseCommand):
 
     # ---------------------------------------------------------------- materials
     def seed_materials(self):
-        data = {
-            "پلاستیک": [
-                ("پلاستیک", 7500, 0.5), ("پت (PET)", 12000, 0.6),
-                ("نایلون", 4000, 0.35), ("ظروف یکبار مصرف", 4500, 0.3),
-            ],
-            "کاغذ و مقوا": [
-                ("کارتن", 4000, 0.3), ("کاغذ", 3500, 0.3), ("روزنامه و مجله", 2800, 0.25),
-            ],
-            "فلزات": [
-                ("آهن", 9000, 0.8), ("آلومینیوم", 35000, 1.2), ("مس", 180000, 1.5),
-                ("برنج", 90000, 1.1), ("قوطی نوشابه", 15000, 0.6),
-            ],
-            "شیشه": [("شیشه شکسته", 1500, 0.2), ("بطری شیشه‌ای", 2000, 0.2)],
-            "الکترونیک": [
-                ("ضایعات الکترونیکی", 18000, 0.5), ("موبایل و لپ‌تاپ فرسوده", 40000, 0.7),
-                ("کابل و سیم برق", 25000, 0.5),
-            ],
-            "پارچه و لباس": [("پارچه و لباس کهنه", 3000, 0.3)],
-            "روغن پخت‌وپز": [("روغن خوراکی مستعمل", 6000, 0.2)],
-            "باتری و لوازم جانبی": [("باتری", 12000, 0.3)],
-            "لاستیک": [("لاستیک فرسوده خودرو", 5000, 0.4)],
-            "چوب": [("ضایعات چوب و پالت", 2000, 0.2)],
-        }
         icons = {
             "پلاستیک": "♻️", "کاغذ و مقوا": "📦", "فلزات": "🔩", "شیشه": "🍾", "الکترونیک": "🔌",
             "پارچه و لباس": "👕", "روغن پخت‌وپز": "🛢️", "باتری و لوازم جانبی": "🔋", "لاستیک": "🛞", "چوب": "🪵",
         }
-        # Reference free-market price for each of the 11 "قیمت روز" homepage
-        # materials, expressed as a ratio of Sabzino's buy price — Sabzino
-        # pays a bit more than the informal scrap market (product story:
-        # guaranteed fair price vs. scattered street buyers).
-        market_ratio = {
-            "آهن": 0.90, "مس": 0.88, "آلومینیوم": 0.90, "برنج": 0.87, "کارتن": 0.85,
-            "کاغذ": 0.85, "پت (PET)": 0.88, "پلاستیک": 0.85, "نایلون": 0.80,
-            "باتری": 0.90, "ضایعات الکترونیکی": 0.82,
-        }
         categories = {}
-        for i, (cat_name, materials) in enumerate(data.items()):
-            cat, _ = MaterialCategory.objects.get_or_create(name=cat_name, defaults={"icon": icons.get(cat_name, "♻️"), "order": i})
+        for i, cat_name in enumerate(icons):
+            cat, _ = MaterialCategory.objects.get_or_create(name=cat_name, defaults={"icon": icons[cat_name], "order": i})
             categories[cat_name] = cat
-            for mat_name, price, co2 in materials:
-                slug = mat_name.replace(" ", "-").replace("(", "").replace(")", "")
-                mat, created = Material.objects.get_or_create(
-                    slug=slug, defaults={"category": cat, "name": mat_name, "co2_kg_saved_per_kg": Decimal(str(co2))}
-                )
-                if not created and mat.name != mat_name:
-                    mat.name = mat_name
-                    mat.save(update_fields=["name"])
-                existing_price = mat.prices.filter(active=True).first()
-                ratio = market_ratio.get(mat_name)
-                market_price = Decimal(str(round(price * ratio, -2))) if ratio else None
-                if not existing_price:
-                    MaterialPrice.objects.create(
-                        material=mat, price_per_unit=Decimal(str(price)), market_price=market_price, active=True,
-                    )
-                elif ratio and existing_price.market_price is None:
-                    existing_price.market_price = market_price
-                    existing_price.save(update_fields=["market_price"])
+
+        def slugify(name):
+            return name.replace(" ", "-").replace("(", "").replace(")", "").replace("/", "-")
+
+        def upsert_priced(cat_name, name, citizen_price, market_price, co2=Decimal("0.4")):
+            """Create or update a material with a fixed per-kg buy price (always overwrites
+            price to the given figures — this is a deliberate re-price, not a gap-fill)."""
+            cat = categories[cat_name]
+            slug = slugify(name)
+            mat, created = Material.objects.get_or_create(
+                slug=slug, defaults={"category": cat, "name": name, "co2_kg_saved_per_kg": co2},
+            )
+            changed = []
+            if not created and mat.name != name:
+                mat.name = name
+                changed.append("name")
+            if mat.category_id != cat.id:
+                mat.category = cat
+                changed.append("category")
+            if mat.requires_appraisal:
+                mat.requires_appraisal = False
+                changed.append("requires_appraisal")
+            if not mat.is_active:
+                mat.is_active = True
+                changed.append("is_active")
+            if changed:
+                mat.save(update_fields=changed)
+            cp, mp = Decimal(str(citizen_price)), Decimal(str(market_price))
+            price = mat.prices.filter(active=True).first()
+            if price:
+                if price.price_per_unit != cp or price.market_price != mp:
+                    price.price_per_unit = cp
+                    price.market_price = mp
+                    price.save(update_fields=["price_per_unit", "market_price"])
+            else:
+                MaterialPrice.objects.create(material=mat, price_per_unit=cp, market_price=mp, active=True)
+            return mat
+
+        def upsert_appraisal(cat_name, name, co2=Decimal("0.3")):
+            """Material with no fixed price — value only known after physical inspection
+            (e-waste boards, tires with 0-priced market data, etc)."""
+            cat = categories[cat_name]
+            slug = slugify(name)
+            mat, created = Material.objects.get_or_create(
+                slug=slug, defaults={"category": cat, "name": name, "co2_kg_saved_per_kg": co2, "requires_appraisal": True},
+            )
+            changed = []
+            if not mat.requires_appraisal:
+                mat.requires_appraisal = True
+                changed.append("requires_appraisal")
+            if not mat.is_active:
+                mat.is_active = True
+                changed.append("is_active")
+            if changed:
+                mat.save(update_fields=changed)
+            mat.prices.filter(active=True).update(active=False)
+            return mat
+
+        def deactivate(name):
+            """Retire a superseded generic material once split into real grades — kept in
+            the DB (old requests/listings still reference it), just hidden from the catalog."""
+            mat = Material.objects.filter(slug=slugify(name)).first()
+            if not mat:
+                return
+            if mat.is_active:
+                mat.is_active = False
+                mat.save(update_fields=["is_active"])
+            mat.prices.filter(active=True).update(active=False)
+
+        # ------------------------------------------------------------------
+        # Pricing reference: قیمت‌های خرده‌بار «ایران‌ضایعات»، مورخ ۱۴۰۵/۰۵/۲۵
+        # (تحویل مقصد). قیمت سبزینو به شهروند ≈ ۷۰٪ قیمت خرده‌بار بازار —
+        # تفاوت صرف هزینهٔ جمع‌آوری/راننده و سود پلتفرم می‌شود، نه سود ناعادلانه.
+        # این ارقام پایهٔ محاسبهٔ اولیه‌اند، نه ادعای قیمت لحظه‌ای بازار امروز؛
+        # مدیر سبزینو می‌تواند از تب «قیمت‌ها» در داشبورد مدیریت هر زمان به‌روزشان کند.
+        # ------------------------------------------------------------------
+
+        # ---- پلاستیک: هر گرید به‌عنوان یک قلم مجزا (نه یک «پلاستیک» کلی) ----
+        for name, cp, mp in [
+            ("PET درجه ۱", 42000, 60889), ("PET درجه ۲", 38000, 55200),
+            ("PET پرسی درجه ۱", 41000, 58333), ("PET پرسی درجه ۲", 59000, 85000),
+            ("نایلون درجه ۱", 22000, 31500), ("نایلون درجه ۲", 12000, 17417),
+            ("لوله پلی‌اتیلن درجه ۱", 30000, 43000), ("لوله پلی‌اتیلن درجه ۲", 16500, 23800),
+            ("لوله سفید PP", 68000, 97429), ("اتصالات PP", 26000, 37000),
+            ("لوله پلیکا", 21000, 30000), ("UPVC", 60000, 86000),
+            ("GPPS کریستال", 29000, 41667), ("ABS", 45000, 65000), ("HIPS", 14000, 20000),
+            ("سبد مرغی", 24000, 34000), ("سبد درهم", 20000, 29083), ("سبد مشکی", 24000, 33833),
+            ("سبد سبز", 28000, 40000), ("سبد زرد", 33000, 47500), ("سبد قرمز", 33000, 47500),
+            ("سبد آبی", 33000, 47500), ("سپر ماشین", 34000, 48667), ("گونی و جامبو", 4000, 6000),
+            ("طلق", 24000, 35000), ("بادی بی‌رنگ", 38000, 54400), ("بادی ۴ رنگ", 27000, 38200),
+            ("بادی تک‌رنگ", 33000, 47500), ("لاک زنده بازیافت", 7000, 10667),
+        ]:
+            upsert_priced("پلاستیک", name, cp, mp, Decimal("0.55"))
+        for old_name in ["پلاستیک", "پت (PET)", "نایلون", "ظروف یکبار مصرف"]:
+            deactivate(old_name)
+
+        # ---- کاغذ و مقوا ----
+        for name, cp, mp in [
+            ("کارتن فله", 16000, 23926), ("کارتن پرسی", 24000, 34665),
+            ("پوشال سفید", 41000, 58333), ("پوشال رنگی", 25000, 35667),
+            ("پوشال صحافی", 29000, 42000), ("پوشال لیوان کاغذی", 40000, 57000),
+            ("کاغذ سفید و فرم", 31000, 44429), ("کاغذ مخلوط، دفتر و کتاب", 34000, 48632),
+            ("کاغذ پشت طوسی", 19000, 27500), ("روزنامه", 34000, 48500),
+        ]:
+            upsert_priced("کاغذ و مقوا", name, cp, mp, Decimal("0.3"))
+        for old_name in ["کارتن", "کاغذ", "روزنامه و مجله"]:
+            deactivate(old_name)
+
+        # ---- شیشه ----
+        for name, cp, mp in [
+            ("شیشه بلور", 3000, 4300), ("شیشه جام بی‌رنگ", 2400, 3500),
+            ("شیشه جام رنگی", 1700, 2500), ("بطری شیشه‌ای سفید", 2200, 3250),
+            ("بطری شیشه‌ای رنگی", 1700, 2450), ("شیشه خودرو", 1000, 1400),
+        ]:
+            upsert_priced("شیشه", name, cp, mp, Decimal("0.2"))
+        for old_name in ["شیشه شکسته", "بطری شیشه‌ای"]:
+            deactivate(old_name)
+
+        # ---- فلزات ----
+        for name, cp, mp in [
+            ("آهن سوپر ویژه", 28000, 38225), ("آهن درجه ۱", 26000, 35929), ("آهن درجه ۲", 18000, 25650),
+            ("چدن درشت‌بار", 28000, 38125),
+            ("آلومینیوم نرم", 310000, 413229), ("آلومینیوم خشک", 215000, 290551),
+            ("مس کابلی قرمز", 1500000, 2017614), ("مس آرمیچری", 1350000, 1833393), ("مس ذوبی", 1350000, 1826912),
+            ("سرب نرم", 190000, 260529), ("استیل ۳۰۴", 75000, 102638),
+        ]:
+            upsert_priced("فلزات", name, cp, mp, Decimal("1.3"))
+        # «قوطی نوشابه» و «برنج» تک‌گرید هستند — همان قلم قبلی به‌روزرسانی می‌شود، نه دو نسخه موازی
+        upsert_priced("فلزات", "قوطی نوشابه", 220000, 297613, Decimal("0.6"))
+        upsert_priced("فلزات", "برنج زردبار", 840000, 1140426, Decimal("1.1"))
+        for old_name in ["آهن", "آلومینیوم", "مس", "برنج"]:
+            deactivate(old_name)
+
+        # ---- باتری و لوازم جانبی ----
+        for name, cp, mp in [
+            ("باتری خشک ایرانی", 140000, 194391), ("باتری خشک خارجی", 120000, 169750),
+            ("باتری موتوری", 112000, 159765), ("باتری UPS", 125000, 179067),
+        ]:
+            upsert_priced("باتری و لوازم جانبی", name, cp, mp, Decimal("0.3"))
+        deactivate("باتری")
+
+        # ---- الکترونیک: لوازم برقی با قیمت مشخص + قطعات پرارزش «فقط با کارشناسی» ----
+        for name, cp, mp in [
+            ("دینام پوسته چدن", 110000, 156667), ("دینام پوسته آلومینیوم", 115000, 165000),
+            ("کیلوبار داغونی", 110000, 156667),
+        ]:
+            upsert_priced("الکترونیک", name, cp, mp, Decimal("0.5"))
+        for name in [
+            "لوازم الکترونیکی مجاز (کارشناسی)", "موبایل و لپ‌تاپ فرسوده",
+            "برد موبایل", "پردازنده و رم", "مادربرد", "برد سبز",
+        ]:
+            upsert_appraisal("الکترونیک", name, Decimal("0.5"))
+        deactivate("ضایعات الکترونیکی")
+        # «کابل و سیم برق» داده جدیدی نداشت — دست‌نخورده با قیمت قبلی باقی می‌ماند.
+
+        # ---- لاستیک: طبق داده ارسالی همهٔ قیمت‌های بازار صفر بودند → کارشناسی ----
+        upsert_appraisal("لاستیک", "لاستیک فرسوده خودرو", Decimal("0.4"))
+
+        # ---- چوب ----
+        upsert_priced("چوب", "پالت چوبی", 3500, 5000, Decimal("0.2"))
+        upsert_appraisal("چوب", "خاک‌اره", Decimal("0.1"))
+        deactivate("ضایعات چوب و پالت")
+
+        # ---- بدون تغییر (داده جدیدی برای این‌ها ارائه نشد) ----
+        for cat_name, name, price, co2 in [
+            ("پارچه و لباس", "پارچه و لباس کهنه", 3000, 0.3),
+            ("روغن پخت‌وپز", "روغن خوراکی مستعمل", 6000, 0.2),
+            ("الکترونیک", "کابل و سیم برق", 25000, 0.5),
+        ]:
+            mat, _ = Material.objects.get_or_create(
+                slug=slugify(name),
+                defaults={"category": categories[cat_name], "name": name, "co2_kg_saved_per_kg": Decimal(str(co2))},
+            )
+            if not mat.prices.filter(active=True).exists():
+                MaterialPrice.objects.create(material=mat, price_per_unit=Decimal(str(price)), active=True)
+
         return categories
 
     def seed_commission_rules(self):

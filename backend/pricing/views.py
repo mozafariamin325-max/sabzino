@@ -10,9 +10,13 @@ class MaterialPriceViewSet(viewsets.ModelViewSet):
     action per spec section 18 — never hard-coded).
     """
 
-    queryset = MaterialPrice.objects.select_related("material").all()
+    queryset = MaterialPrice.objects.select_related("material").order_by("material__category__order", "material__name").all()
     serializer_class = MaterialPriceSerializer
     filterset_fields = ["material", "active"]
+    # Full catalog is small (well under a thousand rows) and both the citizen
+    # calculator and the admin prices tab need the *whole* active price list in
+    # one shot — paginating it would silently truncate to the default page size.
+    pagination_class = None
 
     def get_permissions(self):
         return [permissions.AllowAny()] if self.request.method in permissions.SAFE_METHODS else [permissions.IsAdminUser()]

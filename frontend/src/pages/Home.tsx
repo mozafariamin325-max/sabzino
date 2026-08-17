@@ -74,8 +74,10 @@ export default function Home() {
       )}
 
       <div className="px-4 mt-2">
-        <div className="rounded-3xl bg-gradient-to-l from-brand-600 to-brand-500 p-5 text-white shadow-lg animate-fade-up">
-          <div className="flex items-start justify-between">
+        <div className="rounded-3xl bg-gradient-to-l from-brand-600 to-brand-500 p-5 text-white shadow-lg animate-fade-up relative overflow-hidden">
+          <span className="absolute -left-6 -top-10 w-32 h-32 rounded-full bg-white/10" aria-hidden="true" />
+          <span className="absolute left-10 -bottom-12 w-24 h-24 rounded-full bg-white/10" aria-hidden="true" />
+          <div className="flex items-start justify-between relative z-10">
             <div>
               <p className="text-xs text-brand-50/90">اعتبار سبزینو</p>
               {walletLoading ? (
@@ -90,36 +92,59 @@ export default function Home() {
           </div>
           <Link
             to="/wallet"
-            className="mt-4 inline-flex items-center gap-1.5 bg-white text-brand-700 text-sm font-medium px-4 py-2 rounded-xl"
+            className="mt-4 inline-flex items-center gap-1.5 bg-white text-brand-700 text-sm font-medium px-4 py-2 rounded-xl relative z-10 shadow-sm"
           >
             شارژ و برداشت
           </Link>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mt-3">
-          <Card className="p-3 text-center">
-            <p className="text-lg font-bold text-brand-600">{points ? points.points : "—"} 🌿</p>
-            <p className="text-[11px] text-ink-500 mt-0.5">امتیاز سبزینو</p>
-          </Card>
-          <Card className="p-3 text-center">
-            <p className="text-lg font-bold text-brand-600">{formatKg(totalKg)}</p>
-            <p className="text-[11px] text-ink-500 mt-0.5">مجموع بازیافت (کیلوگرم)</p>
-          </Card>
-          <Card className="p-3 text-center">
-            <p className="text-lg font-bold text-brand-600">{requests ? requests.length : "—"}</p>
-            <p className="text-[11px] text-ink-500 mt-0.5">درخواست‌ها</p>
-          </Card>
-        </div>
+        <Card className="mt-3 p-4 grid grid-cols-3 divide-x divide-x-reverse divide-brand-50/80">
+          <div className="flex flex-col items-center gap-1.5 px-1">
+            <span className="w-9 h-9 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-base">🌿</span>
+            <p className="text-base font-extrabold text-ink-900">{points ? points.points : "—"}</p>
+            <p className="text-[10.5px] text-ink-500 text-center leading-tight">امتیاز سبزینو</p>
+          </div>
+          <div className="flex flex-col items-center gap-1.5 px-1">
+            <span className="w-9 h-9 rounded-full bg-sky-50 text-sky-700 flex items-center justify-center text-base">♻️</span>
+            <p className="text-base font-extrabold text-ink-900">{formatKg(totalKg)}</p>
+            <p className="text-[10.5px] text-ink-500 text-center leading-tight">مجموع بازیافت (کیلوگرم)</p>
+          </div>
+          <div className="flex flex-col items-center gap-1.5 px-1">
+            <span className="w-9 h-9 rounded-full bg-violet-50 text-violet-700 flex items-center justify-center text-base">📦</span>
+            <p className="text-base font-extrabold text-ink-900">{requests ? requests.length : "—"}</p>
+            <p className="text-[10.5px] text-ink-500 text-center leading-tight">درخواست‌ها</p>
+          </div>
+        </Card>
       </div>
 
       <div className="px-4 mt-5">
         <Link
           to="/calculator"
-          className="block rounded-2xl bg-gradient-to-l from-brand-700 to-emerald-800 p-4 text-white relative overflow-hidden"
+          className="block rounded-3xl p-5 text-white relative overflow-hidden shadow-md"
+          style={{ background: "linear-gradient(120deg, #0b3d24 0%, #14603a 45%, #1c8a4f 100%)" }}
         >
-          <p className="font-bold text-sm relative z-10">ضایعاتت چقدر می‌ارزه؟</p>
-          <p className="text-xs text-brand-50/90 mt-1 relative z-10">نوع و وزن ضایعات رو انتخاب کن، ارزشش رو همین الان ببین 💰</p>
-          <span className="absolute -left-2 -bottom-2 text-6xl opacity-20">🧮</span>
+          {/* Decorative eco-illustration layer (flat-design shapes, no external image assets) */}
+          <svg className="absolute inset-0 w-full h-full" viewBox="0 0 340 130" preserveAspectRatio="xMaxYMid slice" aria-hidden="true">
+            <circle cx="300" cy="18" r="34" fill="#ffffff" opacity="0.08" />
+            <circle cx="258" cy="98" r="48" fill="#ffffff" opacity="0.06" />
+            <path d="M235 130 C 248 92, 300 92, 312 58 L 340 58 L 340 130 Z" fill="#ffffff" opacity="0.05" />
+            <g transform="translate(266,50)" opacity="0.95">
+              <rect x="-4" y="8" width="38" height="9" rx="4" fill="#ffffff" fillOpacity="0.22" />
+              <rect x="10" y="-2" width="10" height="10" rx="2" fill="#ffffff" fillOpacity="0.22" />
+              <rect x="0" y="16" width="30" height="34" rx="5" fill="#ffffff" fillOpacity="0.16" />
+              <path d="M8 28 l6 -6 l4 4 l8 -8" stroke="#ffffff" strokeOpacity="0.6" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </g>
+          </svg>
+          <div className="relative z-10 max-w-[68%]">
+            <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white/15 text-lg mb-2.5">🧮</span>
+            <p className="font-bold text-sm">ضایعاتت چقدر می‌ارزه؟</p>
+            <p className="text-xs text-brand-50/90 mt-1.5 leading-relaxed">
+              نوع و وزن ضایعات رو انتخاب کن، ارزشش رو همین الان ببین
+            </p>
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-white text-brand-700 px-3 py-1.5 rounded-lg mt-3">
+              محاسبه کن ‹
+            </span>
+          </div>
         </Link>
       </div>
 
@@ -137,12 +162,12 @@ export default function Home() {
         ) : (
           <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4">
             {homePrices.map((p) => (
-              <Card key={p.id} className="p-3 flex-shrink-0 w-[132px]">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-base">{p.material_icon || "♻️"}</span>
-                  <p className="text-xs font-bold text-ink-900 truncate">{p.label}</p>
-                </div>
-                <p className="text-sm font-extrabold text-brand-600 mt-2">
+              <Card key={p.id} className="p-3.5 flex-shrink-0 w-[136px]">
+                <span className="w-8 h-8 rounded-xl bg-brand-50 flex items-center justify-center text-base mb-2">
+                  {p.material_icon || "♻️"}
+                </span>
+                <p className="text-xs font-bold text-ink-900 truncate">{p.label}</p>
+                <p className="text-sm font-extrabold text-brand-600 mt-1.5">
                   {formatToman(p.price_per_unit)} <span className="text-[10px] font-normal text-ink-500">ت/{p.unit_display}</span>
                 </p>
                 {p.market_price && (
@@ -161,8 +186,14 @@ export default function Home() {
         </div>
         <div className="grid grid-cols-2 gap-3">
           {SERVICES.map((s) => (
-            <Link key={s.to} to={s.to} className={`rounded-2xl ${s.bg} p-4 flex flex-col gap-3`}>
-              <span className="text-2xl">{s.icon}</span>
+            <Link
+              key={s.to}
+              to={s.to}
+              className={`rounded-2xl ${s.bg} p-4 flex flex-col gap-3 shadow-[0_1px_2px_rgba(15,122,61,0.05)] active:scale-[0.98] transition`}
+            >
+              <span className="w-11 h-11 rounded-full bg-white/70 flex items-center justify-center text-xl shadow-sm">
+                {s.icon}
+              </span>
               <span className="text-sm font-medium text-ink-800">{s.label}</span>
             </Link>
           ))}
@@ -203,7 +234,7 @@ export default function Home() {
             <p className="text-sm font-bold text-ink-900">با امتیازها تخفیف بگیر!</p>
             <p className="text-xs text-ink-500 mt-0.5">از فروشگاه سبزینو خرید کن و تخفیف بگیر</p>
           </div>
-          <span className="text-3xl">🎁</span>
+          <span className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-2xl shadow-sm">🎁</span>
         </Card>
       </div>
 
