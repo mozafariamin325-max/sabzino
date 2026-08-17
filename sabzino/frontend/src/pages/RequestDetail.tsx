@@ -210,14 +210,19 @@ function CollectorRating({
   );
 }
 
-type Allocation = { project: string; amount: string };
-
 /**
  * "صفحه انتخاب اثر" from the product flow — appears once a delivery's value
  * is known (weighing complete). Fully optional: doing nothing means the
  * citizen simply keeps the full amount already credited to their wallet by
  * complete_weighing(). Choosing to contribute debits that same wallet via
  * useContribute() (POST /green-impact/contribute/) — no parallel ledger.
+ *
+ * Interaction model: a single master "دریافت نقدی" slider sets how much of
+ * the delivery's value stays as cash; the remainder is split evenly across
+ * whichever projects the citizen taps on (toggle chips, not per-item drag —
+ * keeps the "sum always = 100%" invariant trivially true, no rebalancing
+ * math to get wrong). Defaults to 100% cash — nothing is ever pre-selected
+ * on the citizen's behalf.
  */
 function GreenImpactChoice({ requestUid, totalValue }: { requestUid: string; totalValue: number }) {
   const { data: existing, isLoading: existingLoading } = useMyContributions({ request: requestUid });
@@ -225,7 +230,8 @@ function GreenImpactChoice({ requestUid, totalValue }: { requestUid: string; tot
   const contribute = useContribute();
 
   const [open, setOpen] = useState(false);
-  const [allocations, setAllocations] = useState<Allocation[]>([{ project: "", amount: "" }]);
+  const [cashPct, setCashPct] = useState(100);
+  const [selected, setSelected] = useState<string[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastContributions, setLastContributions] = useState<NonNullable<typeof existing>>([]);
 
@@ -248,26 +254,38 @@ function GreenImpactChoice({ requestUid, totalValue }: { requestUid: string; tot
     );
   }
 
-  const allocatedTotal = allocations.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
-  const remaining = totalValue - allocatedTotal;
-  const canSubmit =
-    allocations.every((a) => a.project && Number(a.amount) > 0) && allocatedTotal > 0 && allocatedTotal <= totalValue;
+  const poolPct = 100 - cashPct;
+  const cashAmt = Math.round((totalValue * cashPct) / 100);
+  const poolAmt = totalValue - cashAmt;
+  const perProjectPct = selected.length ? poolPct / selected.length : 0;
+  const perProjectBase = selected.length ? Math.floor(poolAmt / selected.length) : 0;
+  const amounts: Record<string, number> = {};
+  selected.forEach((uid, i) => {
+    // last selected project absorbs the rounding remainder so the sum is exact
+    amounts[uid] = i === selected.length - 1 ? poolAmt - perProjectBase * (selected.length - 1) : perProjectBase;
+  });
+  const canSubmit = selected.length > 0 && poolAmt > 0;
 
-  function updateAllocation(index: number, patch: Partial<Allocation>) {
-    setAllocations((prev) => prev.map((a, i) => (i === index ? { ...a, ...patch } : a)));
+  function toggleProject(uid: string) {
+    setSelected((prev) => {
+      if (prev.includes(uid)) return prev.filter((u) => u !== uid);
+      const next = [...prev, uid];
+      if (cashPct === 100) setCashPct(80); // first pick nudges 20% into the pool so the split isn't stuck at zero
+      return next;
+    });
   }
 
   async function handleSubmit() {
+    if (!canSubmit) return;
     const res = await contribute.mutateAsync({
       request: requestUid,
-      allocations: allocations
-        .filter((a) => a.project && Number(a.amount) > 0)
-        .map((a) => ({ project: a.project, amount: Number(a.amount) })),
+      allocations: selected.map((uid) => ({ project: uid, amount: amounts[uid] })),
     });
-    // stash for the modal — react-query cache already invalidated onSuccess
     setLastContributions(res.contributions);
     setShowSuccess(true);
     setOpen(false);
+    setCashPct(100);
+    setSelected([]);
   }
 
   if (!open) {
@@ -300,58 +318,88 @@ function GreenImpactChoice({ requestUid, totalValue }: { requestUid: string; tot
 
   return (
     <Card className="p-4">
-      <p className="text-sm font-bold text-ink-900 mb-1">اختصاص به اثر سبز</p>
-      <p className="text-[11px] text-ink-500 mb-3">
-        ارزش این تحویل: <span className="font-bold text-brand-600">{formatToman(totalValue)} تومان</span>
-      </p>
+      <p className="text-sm font-bold text-ink-900 mb-3">نحوهٔ تخصیص اثر سبز</p>
+
+      {/* Central gauge: green ring share = cash%, showing the delivery's total value */}
+      <div className="relative w-28 h-28 mx-auto mb-4">
+        <div
+          className="absolute inset-0 rounded-full"
+          style={{ background: `conic-gradient(#16a34a 0% ${cashPct}%, #cffde3 ${cashPct}% 100%)` }}
+        />
+        <div className="absolute inset-[7px] rounded-full bg-white flex flex-col items-center justify-center text-center px-2">
+          <p className="text-[9.5px] text-ink-500">ارزش این تحویل</p>
+          <p className="text-sm font-extrabold text-ink-900 leading-tight">{formatToman(totalValue)}</p>
+          <p className="text-[9px] text-ink-400">تومان</p>
+        </div>
+      </div>
+
+      {/* Master cash/pool slider */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between text-xs mb-1.5">
+          <span className="font-medium text-ink-800">💵 دریافت نقدی</span>
+          <span className="font-bold text-brand-600">{cashPct}٪ · {formatToman(cashAmt)} تومان</span>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={cashPct}
+          onChange={(e) => setCashPct(Number(e.target.value))}
+          className="w-full accent-brand-600"
+        />
+      </div>
 
       {(projects || []).length === 0 ? (
         <p className="text-xs text-ink-500">در حال حاضر طرحی برای مشارکت فعال نیست.</p>
       ) : (
-        <div className="flex flex-col gap-2.5">
-          {allocations.map((a, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <select
-                className="flex-1 rounded-lg border border-brand-100 px-2.5 py-2 text-xs"
-                value={a.project}
-                onChange={(e) => updateAllocation(i, { project: e.target.value })}
-              >
-                <option value="">انتخاب طرح…</option>
-                {(projects || []).map((p) => (
-                  <option key={p.uid} value={p.uid}>
-                    {p.icon} {p.title}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                placeholder="مبلغ"
-                className="w-24 rounded-lg border border-brand-100 px-2.5 py-2 text-xs text-center"
-                value={a.amount}
-                onChange={(e) => updateAllocation(i, { amount: e.target.value })}
-              />
-            </div>
-          ))}
-          {allocations.length < (projects || []).length && (
-            <button
-              type="button"
-              className="text-[11px] text-brand-600 font-medium self-start"
-              onClick={() => setAllocations((prev) => [...prev, { project: "", amount: "" }])}
-            >
-              + افزودن طرح دیگر (مشارکت ترکیبی)
-            </button>
-          )}
+        <div className="flex flex-col gap-1 border-t border-brand-50 pt-2">
+          {(projects || []).map((p) => {
+            const isSel = selected.includes(p.uid);
+            return (
+              <button key={p.uid} type="button" onClick={() => toggleProject(p.uid)} className="text-right">
+                <div className="flex items-center gap-2.5 py-1.5">
+                  <span
+                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[9px] shrink-0 transition ${
+                      isSel ? "bg-brand-500 border-brand-500 text-white" : "border-ink-200 text-transparent"
+                    }`}
+                  >
+                    ✓
+                  </span>
+                  <span className="w-7 h-7 rounded-lg bg-brand-50 flex items-center justify-center text-sm shrink-0">{p.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-ink-800 truncate">{p.title}</p>
+                    <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden mt-1">
+                      <div
+                        className="h-full rounded-full bg-brand-500 transition-all"
+                        style={{ width: `${isSel ? perProjectPct : 0}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-left shrink-0 w-16">
+                    <p className="text-[11px] font-bold text-ink-900">{isSel ? Math.round(perProjectPct) : 0}٪</p>
+                    <p className="text-[10px] text-ink-500">{formatToman(isSel ? amounts[p.uid] : 0)}</p>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       )}
 
-      <div className="flex items-center justify-between mt-3 text-[11px]">
-        <span className="text-ink-500">باقی‌مانده نزد شما</span>
-        <span className={`font-bold ${remaining < 0 ? "text-red-600" : "text-ink-900"}`}>{formatToman(Math.max(0, remaining))} تومان</span>
+      <div className="flex items-center justify-between mt-3 pt-2 border-t border-brand-50 text-[11px]">
+        <span className="text-ink-500 shrink-0">ترکیب انتخاب‌شده</span>
+        <span className="font-bold text-ink-900 flex items-center gap-1 flex-wrap justify-end" dir="ltr">
+          <bdi>{formatToman(cashAmt)}</bdi>
+          {selected.map((uid) => (
+            <span key={uid} className="flex items-center gap-1">
+              <span className="font-normal text-ink-400">+</span>
+              <bdi>{formatToman(amounts[uid])}</bdi>
+            </span>
+          ))}
+        </span>
       </div>
 
-      {remaining < 0 && <p className="text-red-600 text-[11px] mt-1">مجموع مبالغ نمی‌تواند بیشتر از ارزش تحویل باشد.</p>}
       {contribute.error && <p className="text-red-600 text-[11px] mt-1">{(contribute.error as Error).message}</p>}
 
       <div className="flex gap-2 mt-4">
@@ -359,7 +407,7 @@ function GreenImpactChoice({ requestUid, totalValue }: { requestUid: string; tot
           انصراف
         </Button>
         <Button full loading={contribute.isPending} disabled={!canSubmit} onClick={handleSubmit}>
-          ثبت مشارکت
+          تأیید و ثبت مشارکت
         </Button>
       </div>
 

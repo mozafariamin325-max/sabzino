@@ -28,6 +28,7 @@ import CameraScan from "./pages/CameraScan";
 import Missions from "./pages/Missions";
 import GreenImpact from "./pages/GreenImpact";
 import ImpactProjects from "./pages/ImpactProjects";
+import ImpactProjectDetail from "./pages/ImpactProjectDetail";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -72,6 +73,7 @@ export default function App() {
       <Route path="/missions" element={<RequireAuth><AppLayout><Missions /></AppLayout></RequireAuth>} />
       <Route path="/green-impact" element={<RequireAuth><AppLayout><GreenImpact /></AppLayout></RequireAuth>} />
       <Route path="/green-impact/projects" element={<RequireAuth><AppLayout><ImpactProjects /></AppLayout></RequireAuth>} />
+      <Route path="/green-impact/projects/:uid" element={<RequireAuth><AppLayout><ImpactProjectDetail /></AppLayout></RequireAuth>} />
 
       <Route path="/addresses" element={<RequireAuth><AppLayout><AddressBook /></AppLayout></RequireAuth>} />
       <Route path="/collector/register" element={<RequireAuth><AppLayout><CollectorRegister /></AppLayout></RequireAuth>} />

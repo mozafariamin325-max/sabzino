@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   useGreenPoints, useMyContributions, useMyGreenImpact, useMyImpact, useMyRequests, useQRCode,
 } from "../api/queries";
+import { useAuthStore } from "../store/auth";
 import { IMPACT_CATEGORY_ICONS, IMPACT_CATEGORY_LABELS, type ImpactCategory, type ImpactContribution } from "../api/types";
 import { Button, Card, CenterLoading, DemoBadge, EmptyState, TopBar } from "../components/ui";
 import { formatKg, formatNumber, formatToman, toJalali } from "../lib/format";
@@ -17,10 +18,24 @@ const CATEGORY_BAR_COLORS: Record<ImpactCategory, string> = {
 
 function ReceiptModal({ contribution, onClose }: { contribution: ImpactContribution; onClose: () => void }) {
   const { data: qr, isLoading } = useQRCode(contribution.tracking_code);
+
+  function handleDownload() {
+    if (!qr) return;
+    const a = document.createElement("a");
+    a.href = qr;
+    a.download = `sabzino-green-impact-${contribution.tracking_code}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4 sm:pb-0">
       <div className="w-full max-w-sm bg-white rounded-3xl p-6 relative animate-impact-sheet max-h-[85vh] overflow-y-auto">
-        <p className="text-sm font-extrabold text-ink-900 text-center mb-1">رسید دیجیتال مشارکت</p>
+        <div className="flex items-center justify-center gap-1.5 mb-1">
+          <span className="text-base">🌱</span>
+          <p className="text-sm font-extrabold text-ink-900">رسید دیجیتال مشارکت</p>
+        </div>
         <p className="text-[11px] text-ink-500 text-center mb-4">اثر سبز من — سبزینو</p>
 
         <div className="flex flex-col items-center text-center">
@@ -43,9 +58,14 @@ function ReceiptModal({ contribution, onClose }: { contribution: ImpactContribut
           <Row label="تاریخ" value={toJalali(contribution.created_at)} />
         </div>
 
-        <Button full className="mt-5" onClick={onClose}>
-          بستن
-        </Button>
+        <div className="flex flex-col gap-2 mt-5">
+          <Button full variant="secondary" onClick={handleDownload} disabled={!qr}>
+            دانلود فایل رسید (QR)
+          </Button>
+          <Button full onClick={onClose}>
+            بستن
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -61,6 +81,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 export default function GreenImpact() {
+  const user = useAuthStore((s) => s.user);
   const { data: impact, isLoading: impactLoading } = useMyGreenImpact();
   const { data: myImpact } = useMyImpact();
   const { data: points } = useGreenPoints();
@@ -82,6 +103,20 @@ export default function GreenImpact() {
   return (
     <div>
       <TopBar title="اثر سبز من" subtitle="هر تحویل، یک اثر" right={<DemoBadge />} />
+
+      {user && (
+        <div className="px-4 mb-1 flex items-center gap-3">
+          <span className="w-11 h-11 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-base font-bold shrink-0">
+            {user.first_name?.[0] || "س"}
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-ink-900 truncate">
+              {user.first_name || user.last_name ? `${user.first_name || ""} ${user.last_name || ""}`.trim() : "کاربر سبزینو"}
+            </p>
+            <p className="text-[11px] text-ink-500">پروفایل اثر سبز شما</p>
+          </div>
+        </div>
+      )}
 
       {impactLoading ? (
         <CenterLoading />

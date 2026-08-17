@@ -26,6 +26,7 @@ class ImpactProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ImpactProjectSerializer
     filterset_fields = ["category", "status"]
     pagination_class = None
+    lookup_field = "uid"
 
     def get_permissions(self):
         return [permissions.AllowAny()] if self.request.method in permissions.SAFE_METHODS else [permissions.IsAdminUser()]

@@ -12,6 +12,7 @@ const TX_LABELS: Record<string, { label: string; sign: string; color: string }> 
   REWARD: { label: "پاداش", sign: "+", color: "text-brand-600" },
   COMMISSION: { label: "کمیسیون", sign: "-", color: "text-red-500" },
   REFUND: { label: "بازگشت وجه", sign: "+", color: "text-brand-600" },
+  GREEN_IMPACT: { label: "مشارکت اثر سبز", sign: "-", color: "text-rose-500" },
 };
 
 export default function WalletPage() {
