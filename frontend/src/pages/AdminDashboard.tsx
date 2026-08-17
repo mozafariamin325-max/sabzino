@@ -8,9 +8,11 @@ import { useAuthStore } from "../store/auth";
 import {
   downloadAdminExport, useAdminCharts, useDecideVerification, useGlobalSearch, useVerificationCenter,
   useAdminPricing, useSetPrice, useAllCities, useUpdateCity, useChallenges, useListings, useAdminPurchaseRequests,
+  useImpactDashboard, useImpactProjects, useCreateImpactProject, useUpdateImpactProject,
 } from "../api/queries";
 import { Button, Card, CenterLoading, DemoBadge, EmptyState, TopBar } from "../components/ui";
 import { formatKg, formatNumber, formatToman } from "../lib/format";
+import { IMPACT_CATEGORY_LABELS, type ImpactCategory, type ImpactProject } from "../api/types";
 import brandmark from "../assets/brand/brandmark-256.png";
 
 const CHART_COLORS = { primary: "#16a34a", secondary: "#0ea5e9", danger: "#dc2626", muted: "#94a3b8" };
@@ -23,7 +25,7 @@ function jalaliDay(iso: string) {
   }
 }
 
-type Tab = "overview" | "verification" | "charts" | "prices" | "missions" | "cities" | "b2b" | "tools";
+type Tab = "overview" | "verification" | "charts" | "prices" | "missions" | "cities" | "b2b" | "impact" | "tools";
 
 export default function AdminDashboard() {
   const user = useAuthStore((s) => s.user);
@@ -127,6 +129,7 @@ export default function AdminDashboard() {
               ["missions", "🎯 ماموریت‌ها"],
               ["cities", "🏙️ شهرها"],
               ["b2b", "🏭 بازار B2B"],
+              ["impact", "🌱 اثر سبز"],
               ["tools", "🔎 جستجو و خروجی"],
             ] as const).map(([key, label]) => (
               <button
@@ -179,6 +182,7 @@ export default function AdminDashboard() {
         {isStaff && tab === "missions" && <MissionsTab />}
         {isStaff && tab === "cities" && <CitiesTab />}
         {isStaff && tab === "b2b" && <B2BTab />}
+        {isStaff && tab === "impact" && <ImpactTab />}
         {isStaff && tab === "tools" && <ToolsTab />}
       </div>
     </div>
@@ -408,6 +412,221 @@ function B2BTab() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+const IMPACT_CATEGORIES: ImpactCategory[] = ["EMPLOYMENT", "SOCIAL", "ENVIRONMENT", "LOCAL"];
+
+function ImpactTab() {
+  const { data: dashboard, isLoading: dashboardLoading } = useImpactDashboard();
+  const { data: projects, isLoading: projectsLoading } = useImpactProjects();
+  const [editingProject, setEditingProject] = useState<ImpactProject | "new" | null>(null);
+
+  if (dashboardLoading || !dashboard) return <CenterLoading />;
+
+  const categoryData = IMPACT_CATEGORIES.map((cat) => ({
+    نام: IMPACT_CATEGORY_LABELS[cat],
+    تومان: dashboard.category_totals[cat] || 0,
+  }));
+  const monthlyData = (dashboard.monthly || []).map((m) => ({ ماه: m.month, تومان: m.total }));
+
+  return (
+    <div className="flex flex-col gap-4 pb-6">
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-1">داشبورد اثر سبز</p>
+        <p className="text-[11px] text-ink-500 leading-5">
+          مجموع مشارکت‌های داوطلبانهٔ شهروندان — تمام مبالغ از طریق دفتر کل کیف پول موجود (همان لجر واریز/برداشت) کسر و ثبت شده‌اند.
+        </p>
+      </Card>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="p-3.5 text-center">
+          <p className="text-lg font-extrabold text-brand-600">{formatToman(dashboard.total_waste_value)}</p>
+          <p className="text-[10.5px] text-ink-500 mt-1">ارزش کل پسماند (ت)</p>
+        </Card>
+        <Card className="p-3.5 text-center">
+          <p className="text-lg font-extrabold text-brand-600">{formatToman(dashboard.total_contributed)}</p>
+          <p className="text-[10.5px] text-ink-500 mt-1">مجموع مشارکت اثر سبز (ت)</p>
+        </Card>
+        <Card className="p-3.5 text-center">
+          <p className="text-lg font-extrabold text-ink-900">{formatNumber(dashboard.participants)}</p>
+          <p className="text-[10.5px] text-ink-500 mt-1">کاربران مشارکت‌کننده</p>
+        </Card>
+        <Card className="p-3.5 text-center">
+          <p className="text-lg font-extrabold text-ink-900">{formatNumber(dashboard.active_projects)} / {formatNumber(dashboard.total_projects)}</p>
+          <p className="text-[10.5px] text-ink-500 mt-1">طرح‌های فعال / کل</p>
+        </Card>
+      </div>
+
+      <ChartCard title="مشارکت به تفکیک دسته">
+        {categoryData.some((c) => c["تومان"] > 0) ? (
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={categoryData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef2f0" />
+              <XAxis dataKey="نام" fontSize={10} />
+              <YAxis fontSize={10} />
+              <Tooltip formatter={(v: number) => `${v.toLocaleString("fa-IR")} تومان`} />
+              <Bar dataKey="تومان" fill={CHART_COLORS.primary} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : <NoData />}
+      </ChartCard>
+
+      <ChartCard title="روند مشارکت ماهانه">
+        {monthlyData.length ? (
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#eef2f0" />
+              <XAxis dataKey="ماه" fontSize={10} />
+              <YAxis fontSize={10} />
+              <Tooltip formatter={(v: number) => `${v.toLocaleString("fa-IR")} تومان`} />
+              <Line type="monotone" dataKey="تومان" stroke={CHART_COLORS.secondary} strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : <NoData />}
+      </ChartCard>
+
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-2">مشارکت به تفکیک طرح</p>
+        {!dashboard.by_project.length ? (
+          <p className="text-xs text-ink-400">هنوز مشارکتی ثبت نشده است.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {dashboard.by_project.map((row) => (
+              <div key={row.project_uid} className="text-xs py-2 border-t border-brand-50 flex items-center justify-between">
+                <span>{row.project_icon} {row.project_title}</span>
+                <span className="text-ink-500">{formatNumber(row.contributors)} نفر — <span className="text-brand-600 font-medium">{formatToman(row.total)} ت</span></span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-2">مشارکت به تفکیک شهر/منطقه</p>
+        {!dashboard.by_city.length ? (
+          <p className="text-xs text-ink-400">داده‌ای موجود نیست.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {dashboard.by_city.map((row) => (
+              <div key={row.city} className="text-xs py-2 border-t border-brand-50 flex items-center justify-between">
+                <span>{row.city}</span>
+                <span className="text-ink-500">{formatNumber(row.contributors)} نفر — <span className="text-brand-600 font-medium">{formatToman(row.total)} ت</span></span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-bold text-ink-900">مدیریت طرح‌های اثر سبز</p>
+          <Button variant="secondary" className="!py-1.5 !px-3 !text-xs" onClick={() => setEditingProject("new")}>
+            + طرح جدید
+          </Button>
+        </div>
+        {projectsLoading ? (
+          <CenterLoading />
+        ) : !projects?.length ? (
+          <p className="text-xs text-ink-400">هنوز طرحی ثبت نشده است.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {projects.map((p) => (
+              <div key={p.uid} className="rounded-xl border border-brand-100 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">
+                    {p.icon} {p.title} {p.is_demo && <span className="text-[9.5px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded-full mr-1">نمونه</span>}
+                  </span>
+                  <button className="text-[11px] text-brand-600 font-medium" onClick={() => setEditingProject(p)}>
+                    ویرایش
+                  </button>
+                </div>
+                <p className="text-[10.5px] text-ink-500 mt-1">
+                  {IMPACT_CATEGORY_LABELS[p.category]} · وضعیت: {p.status_display} · جمع‌آوری‌شده: {formatToman(p.raised_amount)} ت
+                  {p.goal_amount ? ` از ${formatToman(p.goal_amount)} ت` : ""}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {editingProject && <ImpactProjectEditor project={editingProject} onClose={() => setEditingProject(null)} />}
+    </div>
+  );
+}
+
+function ImpactProjectEditor({ project, onClose }: { project: ImpactProject | "new"; onClose: () => void }) {
+  const isNew = project === "new";
+  const createProject = useCreateImpactProject();
+  const updateProject = useUpdateImpactProject();
+
+  const [form, setForm] = useState({
+    title: isNew ? "" : project.title,
+    category: isNew ? "ENVIRONMENT" : project.category,
+    icon: isNew ? "🌱" : project.icon,
+    summary: isNew ? "" : project.summary,
+    description: isNew ? "" : project.description,
+    operator_name: isNew ? "" : project.operator_name,
+    goal_amount: isNew ? "" : project.goal_amount || "",
+    status: isNew ? "ACTIVE" : project.status,
+    progress_report: isNew ? "" : project.progress_report,
+  });
+
+  const mutation = isNew ? createProject : updateProject;
+  const error = (createProject.error || updateProject.error) as Error | undefined;
+
+  async function handleSave() {
+    const payload = { ...form, goal_amount: form.goal_amount ? form.goal_amount : null };
+    if (isNew) {
+      await createProject.mutateAsync(payload as any);
+    } else {
+      await updateProject.mutateAsync({ uid: (project as ImpactProject).uid, payload: payload as any });
+    }
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4 sm:pb-0">
+      <div className="w-full max-w-md bg-white rounded-3xl p-5 max-h-[85vh] overflow-y-auto">
+        <p className="text-sm font-bold text-ink-900 mb-3">{isNew ? "طرح اثر سبز جدید" : "ویرایش طرح"}</p>
+        <div className="flex flex-col gap-2.5">
+          <input className="rounded-lg border border-brand-100 px-3 py-2 text-sm" placeholder="عنوان طرح"
+            value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+          <div className="grid grid-cols-2 gap-2">
+            <select className="rounded-lg border border-brand-100 px-2.5 py-2 text-xs"
+              value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as ImpactCategory }))}>
+              {IMPACT_CATEGORIES.map((c) => <option key={c} value={c}>{IMPACT_CATEGORY_LABELS[c]}</option>)}
+            </select>
+            <input className="rounded-lg border border-brand-100 px-2.5 py-2 text-xs text-center" placeholder="ایموجی"
+              value={form.icon} onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))} />
+          </div>
+          <input className="rounded-lg border border-brand-100 px-3 py-2 text-sm" placeholder="خلاصهٔ یک‌خطی"
+            value={form.summary} onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))} />
+          <textarea className="rounded-lg border border-brand-100 px-3 py-2 text-sm" rows={2} placeholder="توضیح کامل هدف طرح"
+            value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+          <input className="rounded-lg border border-brand-100 px-3 py-2 text-sm" placeholder="مجری / مجموعهٔ مسئول"
+            value={form.operator_name} onChange={(e) => setForm((f) => ({ ...f, operator_name: e.target.value }))} />
+          <div className="grid grid-cols-2 gap-2">
+            <input className="rounded-lg border border-brand-100 px-2.5 py-2 text-xs" inputMode="numeric" placeholder="مبلغ هدف (خالی = بدون سقف)"
+              value={form.goal_amount} onChange={(e) => setForm((f) => ({ ...f, goal_amount: e.target.value }))} />
+            <select className="rounded-lg border border-brand-100 px-2.5 py-2 text-xs"
+              value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as ImpactProject["status"] }))}>
+              <option value="ACTIVE">فعال</option>
+              <option value="PAUSED">متوقف</option>
+              <option value="COMPLETED">تکمیل‌شده</option>
+            </select>
+          </div>
+          <textarea className="rounded-lg border border-brand-100 px-3 py-2 text-sm" rows={2} placeholder="گزارش پیشرفت (اختیاری)"
+            value={form.progress_report} onChange={(e) => setForm((f) => ({ ...f, progress_report: e.target.value }))} />
+        </div>
+        {error && <p className="text-red-600 text-xs mt-2">{error.message}</p>}
+        <div className="flex gap-2 mt-4">
+          <Button variant="secondary" onClick={onClose}>انصراف</Button>
+          <Button full loading={mutation.isPending} disabled={!form.title} onClick={handleSave}>ذخیره</Button>
+        </div>
+      </div>
     </div>
   );
 }

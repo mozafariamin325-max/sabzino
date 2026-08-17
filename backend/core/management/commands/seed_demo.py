@@ -65,6 +65,7 @@ class Command(BaseCommand):
         self.seed_marketplace_orgs(city, categories)
         self.seed_requests_and_transactions(citizens, collectors, stations, categories)
         self.seed_badges_and_challenges()
+        self.seed_green_impact(city)
 
         self.stdout.write(self.style.SUCCESS("داده نمونه با موفقیت ساخته شد."))
         self.stdout.write(self.style.SUCCESS(f"ادمین: {admin.username} / رمز: Admin@12345"))
@@ -552,3 +553,61 @@ class Command(BaseCommand):
                 "start_at": timezone.now(), "end_at": timezone.now() + timedelta(days=30), "is_active": True,
             },
         )
+
+    # ---------------------------------------------------------------- green impact
+    def seed_green_impact(self, city):
+        """
+        Demo "اثر سبز" projects (spec: هدف/مبلغ موردنیاز/مجری/گزارش پیشرفت واقعی
+        هنوز وجود ندارد → داده نمونه، اما is_demo=True صریح تا در UI مشخص شود و
+        بعداً بدون تغییر ساختار از پنل مدیریت با پروژه واقعی جایگزین شود).
+        """
+        from green_impact.models import ImpactProject
+
+        projects = [
+            {
+                "title": "توسعه فضای سبز شهری یاسوج", "category": "ENVIRONMENT", "icon": "🌱",
+                "summary": "کمک به توسعه فضای سبز و کاهش اثرات زیست‌محیطی پسماند در یاسوج.",
+                "description": "این طرح با مشارکت شهرداری یاسوج، بخشی از اعتبار جمع‌آوری‌شده را صرف کاشت و نگهداری فضای سبز شهری می‌کند.",
+                "operator_name": "شهرداری یاسوج — معاونت خدمات شهری", "city": city,
+                "goal_amount": Decimal("50000000"), "raised_amount": Decimal("32500000"),
+            },
+            {
+                "title": "فرصت برابر برای کودکان", "category": "SOCIAL", "icon": "❤️",
+                "summary": "حمایت از یک برنامه اجتماعی معتبر برای کودکان و خانواده‌های کم‌برخوردار.",
+                "description": "اعتبار این طرح صرف تهیهٔ لوازم‌التحریر و کمک‌هزینهٔ تحصیلی برای کودکان کم‌برخوردار شهر می‌شود.",
+                "operator_name": "کمیتهٔ امداد امام خمینی (شعبهٔ یاسوج)", "city": city,
+                "goal_amount": None, "raised_amount": Decimal("24800000"),
+            },
+            {
+                "title": "اشتغال سبز", "category": "EMPLOYMENT", "icon": "🤝",
+                "summary": "کمک به آموزش و ایجاد فرصت درآمدی برای افراد کم‌برخوردار در زنجیرهٔ بازیافت.",
+                "description": "این طرح به آموزش تفکیک و بازیافت حرفه‌ای و معرفی افراد به شبکهٔ جمع‌آوری سبزینو کمک می‌کند — درآمد پایدار در ازای کار واقعی، نه کمک بلاعوض.",
+                "operator_name": "سبزینو × مرکز کاریابی یاسوج", "city": city,
+                "goal_amount": None, "raised_amount": Decimal("9400000"),
+            },
+            {
+                "title": "پاکسازی طبیعت دنا", "category": "ENVIRONMENT", "icon": "🏔️",
+                "summary": "پاکسازی مسیرهای گردشگری و طبیعت‌گردی کوه دنا از زباله.",
+                "description": "برگزاری دوره‌ای اردوهای پاکسازی طبیعت با مشارکت داوطلبان محلی، تأمین‌شده از محل اعتبار اثر سبز شهروندان.",
+                "operator_name": "انجمن دوستداران طبیعت دنا", "city": city,
+                "goal_amount": Decimal("15000000"), "raised_amount": Decimal("6200000"),
+            },
+            {
+                "title": "توسعهٔ محلی محلهٔ پاسوج", "category": "LOCAL", "icon": "🏘️",
+                "summary": "پروژه‌های کوچک محیط‌زیستی و اجتماعی در سطح محله.",
+                "description": "نصب سطل‌های تفکیک زباله و آموزش تفکیک از مبدأ برای ساکنان محلهٔ پاسوج.",
+                "operator_name": "شورایاری محلهٔ پاسوج", "city": city,
+                "goal_amount": Decimal("8000000"), "raised_amount": Decimal("1100000"),
+            },
+        ]
+        for i, p in enumerate(projects):
+            ImpactProject.objects.get_or_create(
+                title=p["title"],
+                defaults={
+                    "category": p["category"], "icon": p["icon"], "summary": p["summary"],
+                    "description": p["description"], "operator_name": p["operator_name"], "city": p["city"],
+                    "goal_amount": p["goal_amount"], "raised_amount": p["raised_amount"],
+                    "status": "ACTIVE", "is_demo": True, "order": i,
+                    "progress_report": "گزارش پیشرفت به‌زودی از پنل مدیریت سبزینو به‌روزرسانی می‌شود.",
+                },
+            )

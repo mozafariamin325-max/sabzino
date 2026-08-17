@@ -426,6 +426,112 @@ export interface NearbyCollector {
   distance_km: number | null;
 }
 
+// ---------------- GREEN IMPACT ("اثر سبز من") ----------------
+export type ImpactCategory = "EMPLOYMENT" | "SOCIAL" | "ENVIRONMENT" | "LOCAL";
+
+export const IMPACT_CATEGORY_LABELS: Record<ImpactCategory, string> = {
+  EMPLOYMENT: "اشتغال سبز",
+  SOCIAL: "حمایت اجتماعی",
+  ENVIRONMENT: "محیط‌زیست",
+  LOCAL: "توسعه محلی",
+};
+
+export const IMPACT_CATEGORY_ICONS: Record<ImpactCategory, string> = {
+  EMPLOYMENT: "🤝",
+  SOCIAL: "❤️",
+  ENVIRONMENT: "🌱",
+  LOCAL: "🏘️",
+};
+
+export interface ImpactProject {
+  uid: string;
+  title: string;
+  category: ImpactCategory;
+  category_display: string;
+  icon: string;
+  summary: string;
+  description: string;
+  operator_name: string;
+  city: number | null;
+  city_name: string | null;
+  goal_amount: string | null;
+  raised_amount: string;
+  progress_percent: number | null;
+  status: "ACTIVE" | "PAUSED" | "COMPLETED";
+  status_display: string;
+  progress_report: string;
+  impact_report: string;
+  is_demo: boolean;
+  order: number;
+  created_at: string;
+}
+
+export interface ImpactContribution {
+  uid: string;
+  tracking_code: string;
+  user: number;
+  user_name: string;
+  project: number;
+  project_title: string;
+  project_icon: string;
+  project_category: ImpactCategory;
+  project_category_display: string;
+  request: number | null;
+  request_code: string | null;
+  amount: string;
+  waste_value_snapshot: string | null;
+  created_at: string;
+}
+
+export interface ImpactTier {
+  name: string;
+  icon: string;
+  deliveries: number;
+  next_name: string | null;
+  next_threshold: number | null;
+}
+
+export interface MyGreenImpact {
+  total_contributed: number;
+  contributions_count: number;
+  category_totals: Record<ImpactCategory, number>;
+  tier: ImpactTier;
+  wallet_balance: number;
+  note: string;
+}
+
+export interface ImpactDashboardProjectRow {
+  total: number;
+  contributors: number;
+  project_uid: string;
+  project_title: string;
+  project_icon: string;
+  project_category: ImpactCategory;
+}
+
+export interface ImpactDashboardCityRow {
+  total: number;
+  contributors: number;
+  city: string;
+}
+
+export interface ImpactDashboardMonthRow {
+  month: string;
+  total: number;
+}
+
+export interface ImpactDashboard {
+  total_waste_value: number;
+  total_contributed: number;
+  category_totals: Record<ImpactCategory, number>;
+  participants: number;
+  active_projects: number;
+  total_projects: number;
+  by_project: ImpactDashboardProjectRow[];
+  by_city: ImpactDashboardCityRow[];
+  monthly: ImpactDashboardMonthRow[];
+}
+
 export const STATUS_LABELS: Record<string, string> = {
   REQUESTED: "ثبت شده",
   SEARCHING_COLLECTOR: "در جستجوی جمع‌آور",

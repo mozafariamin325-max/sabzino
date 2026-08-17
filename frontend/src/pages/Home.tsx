@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuthStore } from "../store/auth";
 import {
-  useActiveIdentityCity, useGreenPoints, useMyRequests, useNotifications, usePricing, useWallet,
+  useActiveIdentityCity, useGreenPoints, useMyGreenImpact, useMyRequests, useNotifications, usePricing, useWallet,
 } from "../api/queries";
 import { Card, CenterLoading, DemoBadge, StatusPill } from "../components/ui";
 import { formatKg, formatToman, toJalali } from "../lib/format";
@@ -14,6 +14,7 @@ const SERVICES = [
   { to: "/scan", label: "تشخیص با دوربین", icon: "📷", bg: "bg-rose-50" },
   { to: "/stations", label: "مراکز بازیافت نزدیک", icon: "📍", bg: "bg-amber-50" },
   { to: "/marketplace", label: "فروشگاه سبزینو", icon: "🛍️", bg: "bg-violet-50" },
+  { to: "/green-impact/projects", label: "پروژه‌های اثر سبز", icon: "🌍", bg: "bg-lime-50" },
   { to: "/missions", label: "ماموریت‌های سبز", icon: "🎯", bg: "bg-emerald-50" },
   { to: "/materials", label: "دسته‌بندی و قیمت‌ها", icon: "♻️", bg: "bg-sky-50" },
 ];
@@ -26,6 +27,7 @@ export default function Home() {
   const { data: notifications } = useNotifications();
   const { data: prices } = usePricing();
   const { data: city } = useActiveIdentityCity();
+  const { data: greenImpact } = useMyGreenImpact();
   const unread = (notifications || []).filter((n: { is_read: boolean }) => !n.is_read).length;
 
   const totalKg = (requests || []).reduce((sum, r) => sum + (r.weighing ? Number(r.weighing.weight_kg) : 0), 0);
@@ -115,6 +117,34 @@ export default function Home() {
             <p className="text-[10.5px] text-ink-500 text-center leading-tight">درخواست‌ها</p>
           </div>
         </Card>
+      </div>
+
+      <div className="px-4 mt-3">
+        <Link to="/green-impact" className="block rounded-3xl bg-white p-4 shadow-[0_1px_2px_rgba(15,122,61,0.06),0_8px_24px_-16px_rgba(15,122,61,0.25)] relative overflow-hidden">
+          <div className="flex items-center gap-3">
+            <span className="w-12 h-12 rounded-2xl bg-gradient-to-bl from-brand-400 to-brand-600 flex items-center justify-center text-2xl text-white flex-shrink-0">
+              🌱
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-ink-900">اثر سبز من</p>
+                <span className="text-[11px] text-brand-600 font-medium">مشاهده ‹</span>
+              </div>
+              <p className="text-[11px] text-ink-500 mt-0.5">هر تحویل، یک اثر — زباله من، آینده یک نفر</p>
+            </div>
+          </div>
+          {greenImpact && (
+            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-brand-50">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base">{greenImpact.tier.icon}</span>
+                <span className="text-[11px] text-ink-600 font-medium">{greenImpact.tier.name}</span>
+              </div>
+              <div className="text-[11px] text-ink-500">
+                مشارکت من: <span className="font-bold text-brand-600">{formatToman(greenImpact.total_contributed)} تومان</span>
+              </div>
+            </div>
+          )}
+        </Link>
       </div>
 
       <div className="px-4 mt-5">

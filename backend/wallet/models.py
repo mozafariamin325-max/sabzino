@@ -24,6 +24,7 @@ class WalletTransactionType(models.TextChoices):
     REWARD = "REWARD", "پاداش"
     COMMISSION = "COMMISSION", "کمیسیون"
     REFUND = "REFUND", "بازگشت وجه"
+    GREEN_IMPACT = "GREEN_IMPACT", "مشارکت اثر سبز"
 
 
 class WalletTransaction(TimeStampedModel, UUIDModel):

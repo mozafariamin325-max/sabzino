@@ -8,6 +8,7 @@ import type {
   VerificationItem, Rating, GlobalSearchResult,
   MaterialPrice, City, Challenge, LeaderboardRow, NeighborhoodLeaderboardRow,
   MyImpact, ClassifyResult, NearbyCollector,
+  ImpactProject, ImpactContribution, MyGreenImpact, ImpactDashboard,
 } from "./types";
 
 // ---------------- AUTH ----------------
@@ -640,5 +641,76 @@ export function useNotifications() {
     queryKey: ["notifications"],
     queryFn: async () => (await api.get("/notifications/")).data.results,
     refetchInterval: 30_000,
+  });
+}
+
+// ---------------- GREEN IMPACT ("اثر سبز من") ----------------
+export function useImpactProjects(params?: { category?: string; status?: string }) {
+  return useQuery({
+    queryKey: ["impact-projects", params],
+    queryFn: async () => (await api.get<ImpactProject[]>("/green-impact/projects/", { params })).data,
+  });
+}
+
+export function useImpactProject(uid?: string) {
+  return useQuery({
+    queryKey: ["impact-project", uid],
+    queryFn: async () => (await api.get<ImpactProject>(`/green-impact/projects/${uid}/`)).data,
+    enabled: !!uid,
+  });
+}
+
+export function useCreateImpactProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: Partial<ImpactProject>) => (await api.post("/green-impact/projects/", payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["impact-projects"] }),
+  });
+}
+
+export function useUpdateImpactProject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ uid, payload }: { uid: string; payload: Partial<ImpactProject> }) =>
+      (await api.patch(`/green-impact/projects/${uid}/`, payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["impact-projects"] }),
+  });
+}
+
+export function useMyGreenImpact() {
+  return useQuery({
+    queryKey: ["green-impact", "my-impact"],
+    queryFn: async () => (await api.get<{ green_impact: MyGreenImpact }>("/green-impact/my-impact/")).data.green_impact,
+  });
+}
+
+export function useMyContributions(params?: { request?: string; project?: string }) {
+  return useQuery({
+    queryKey: ["green-impact", "contributions", params],
+    queryFn: async () => (await api.get<ImpactContribution[]>("/green-impact/contributions/", { params })).data,
+  });
+}
+
+export function useContribute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { request?: string; allocations: { project: string; amount: number }[] }) => {
+      const { data } = await api.post("/green-impact/contribute/", payload);
+      if (data?.success === false) throw new Error(data.message || "خطا در ثبت مشارکت");
+      return data as { success: true; contributions: ImpactContribution[] };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["impact-projects"] });
+      qc.invalidateQueries({ queryKey: ["green-impact"] });
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: ["wallet-transactions"] });
+    },
+  });
+}
+
+export function useImpactDashboard() {
+  return useQuery({
+    queryKey: ["green-impact", "admin-dashboard"],
+    queryFn: async () => (await api.get<{ dashboard: ImpactDashboard }>("/green-impact/dashboard/")).data.dashboard,
   });
 }

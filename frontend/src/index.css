@@ -67,3 +67,53 @@ body {
 .animate-fade-up {
   animation: fade-up 0.35s ease-out both;
 }
+
+/* Green Impact success animation — very soft leaf/ripple, no bounce/confetti */
+@keyframes impact-ripple {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.55;
+  }
+  70% {
+    opacity: 0.12;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+.animate-impact-ripple {
+  animation: impact-ripple 1.6s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+}
+
+@keyframes impact-leaf-pop {
+  0% {
+    transform: scale(0.4) rotate(-8deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08) rotate(2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+.animate-impact-leaf {
+  animation: impact-leaf-pop 0.55s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes impact-sheet-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.animate-impact-sheet {
+  animation: impact-sheet-up 0.3s ease-out both;
+}

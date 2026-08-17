@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "municipality",
     "notifications",
     "audit",
+    "green_impact",
 ]
 
 MIDDLEWARE = [
