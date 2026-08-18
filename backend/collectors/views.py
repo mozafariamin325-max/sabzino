@@ -142,3 +142,32 @@ class AdminCollectorViewSet(viewsets.ModelViewSet):
         profile.verification_note = request.data.get("note", "")
         profile.save(update_fields=["verification_status", "verification_note", "updated_at"])
         return Response({"success": True, "message": "جمع‌آور رد شد."})
+
+    @action(detail=True, methods=["post"])
+    def suspend(self, request, pk=None):
+        """
+        Admin can close/suspend a collector's account at any time (e.g. for
+        misconduct or a customer complaint) — required by the "بستن حساب
+        راننده" capability. Immediately forces them offline so an
+        already-online collector can't keep receiving/accepting requests,
+        and accept_request() also re-checks status server-side as a
+        defense-in-depth measure against a client that ignores this.
+        """
+        profile = self.get_object()
+        note = request.data.get("note", "")
+        if not note:
+            return Response({"success": False, "message": "برای تعلیق حساب، ذکر دلیل الزامی است."}, status=400)
+        profile.verification_status = "SUSPENDED"
+        profile.verification_note = note
+        profile.is_online = False
+        profile.save(update_fields=["verification_status", "verification_note", "is_online", "updated_at"])
+        return Response({"success": True, "message": "حساب جمع‌آور تعلیق شد."})
+
+    @action(detail=True, methods=["post"])
+    def reactivate(self, request, pk=None):
+        """Restore a SUSPENDED (or previously REJECTED) collector back to APPROVED."""
+        profile = self.get_object()
+        profile.verification_status = "APPROVED"
+        profile.verification_note = request.data.get("note", "")
+        profile.save(update_fields=["verification_status", "verification_note", "updated_at"])
+        return Response({"success": True, "message": "حساب جمع‌آور فعال شد."})

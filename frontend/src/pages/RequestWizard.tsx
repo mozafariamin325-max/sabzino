@@ -40,6 +40,25 @@ export default function RequestWizard() {
 
   const [description, setDescription] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
+  const [greenIntent, setGreenIntent] = useState<"SELL" | "DONATE">("SELL");
+  const [geocoding, setGeocoding] = useState(false);
+
+  async function handleMapChange(la: number, ln: number) {
+    setNewLat(la);
+    setNewLng(ln);
+    setGeocoding(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${la}&lon=${ln}&accept-language=fa&zoom=18`
+      );
+      const data = await res.json();
+      if (data?.display_name) setNewAddress(data.display_name);
+    } catch {
+      /* reverse geocoding is a convenience only — citizen can always type the address manually */
+    } finally {
+      setGeocoding(false);
+    }
+  }
 
   const addressList: Address[] = addresses || [];
   const allMaterials = useMemo(() => (categories || []).flatMap((c) => c.materials), [categories]);
@@ -73,7 +92,7 @@ export default function RequestWizard() {
     if (step === 0) return selectedIds.length > 0 && selectedIds.every((id) => items[id].weightKg > 0);
     if (step === 1) return !!addressId || (addingNewAddress && newAddress.trim().length > 5);
     if (step === 2) {
-      if (scheduleMode === "ONCE") return true;
+      if (scheduleMode === "ONCE") return !!preferredTime;
       if (frequency === "MONTHLY") return dayOfMonth >= 1 && dayOfMonth <= 28;
       return dayOfWeek >= 0 && dayOfWeek <= 6;
     }
@@ -112,6 +131,7 @@ export default function RequestWizard() {
     );
     fd.append("address", String(finalAddressId));
     if (preferredTime) fd.append("preferred_time", new Date(preferredTime).toISOString());
+    fd.append("green_intent", greenIntent);
     if (description) fd.append("description", description);
     if (photo) fd.append("photo", photo);
 
@@ -252,20 +272,26 @@ export default function RequestWizard() {
               </button>
             ) : (
               <Card className="p-3 flex flex-col gap-3">
-                <AddressMapPicker lat={newLat} lng={newLng} onChange={(la, ln) => { setNewLat(la); setNewLng(ln); }} />
+                <AddressMapPicker lat={newLat} lng={newLng} onChange={handleMapChange} />
                 <input
                   className="rounded-xl border border-brand-100 px-3 py-2.5 text-sm"
                   placeholder="عنوان آدرس"
                   value={newAddressTitle}
                   onChange={(e) => setNewAddressTitle(e.target.value)}
                 />
-                <textarea
-                  className="w-full rounded-xl border border-brand-100 p-3 text-sm"
-                  rows={2}
-                  placeholder="یاسوج، خیابان..."
-                  value={newAddress}
-                  onChange={(e) => setNewAddress(e.target.value)}
-                />
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] text-ink-500">آدرس (خودکار از روی نقشه — قابل ویرایش)</label>
+                    {geocoding && <span className="text-[10.5px] text-brand-600">در حال یافتن آدرس...</span>}
+                  </div>
+                  <textarea
+                    className="w-full rounded-xl border border-brand-100 p-3 text-sm"
+                    rows={2}
+                    placeholder="با جابه‌جایی پین روی نقشه، آدرس اینجا خودکار نوشته می‌شود؛ در صورت نیاز ویرایش کنید."
+                    value={newAddress}
+                    onChange={(e) => setNewAddress(e.target.value)}
+                  />
+                </div>
               </Card>
             )}
           </div>
@@ -290,13 +316,17 @@ export default function RequestWizard() {
 
             {scheduleMode === "ONCE" ? (
               <div>
-                <label className="text-xs text-ink-500 mb-1 block">زمان پیشنهادی (اختیاری)</label>
+                <label className="text-xs text-ink-500 mb-1 block">تاریخ و ساعت مراجعه <span className="text-red-500">*</span></label>
                 <input
                   type="datetime-local"
+                  required
                   className="w-full rounded-xl border border-brand-100 p-3 text-sm"
                   value={preferredTime}
                   onChange={(e) => setPreferredTime(e.target.value)}
                 />
+                {!preferredTime && (
+                  <p className="text-[11px] text-ink-500 mt-1.5">برای ادامه، تاریخ و ساعت مراجعه را انتخاب کنید.</p>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-3">
@@ -358,6 +388,36 @@ export default function RequestWizard() {
         {step === 3 && (
           <div className="flex flex-col gap-3">
             <div>
+              <p className="text-sm font-bold text-ink-800 mb-1">این پسماند برای چیست؟</p>
+              <p className="text-[11px] text-ink-500 mb-2.5 leading-5">
+                فقط یک ترجیح اولیه است و شما را به چیزی متعهد نمی‌کند؛ مبلغ دقیق و نحوهٔ تخصیص را پس از وزن‌کشیِ نهایی و در همان درخواست مشخص می‌کنید.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setGreenIntent("SELL")}
+                  className={`rounded-xl p-3 border text-center transition ${
+                    greenIntent === "SELL" ? "border-brand-500 bg-brand-50" : "border-brand-100 bg-white"
+                  }`}
+                >
+                  <span className="text-xl block">💰</span>
+                  <p className="text-xs font-bold text-ink-900 mt-1.5">می‌خواهم بفروشم</p>
+                  <p className="text-[10.5px] text-ink-500 mt-0.5 leading-4">مبلغ به کیف‌پولم واریز شود</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGreenIntent("DONATE")}
+                  className={`rounded-xl p-3 border text-center transition ${
+                    greenIntent === "DONATE" ? "border-brand-500 bg-brand-50" : "border-brand-100 bg-white"
+                  }`}
+                >
+                  <span className="text-xl block">🌱</span>
+                  <p className="text-xs font-bold text-ink-900 mt-1.5">کمک به اثر سبز</p>
+                  <p className="text-[10.5px] text-ink-500 mt-0.5 leading-4">صرف کارهای خیر و محیط‌زیست شود</p>
+                </button>
+              </div>
+            </div>
+            <div>
               <label className="text-xs text-ink-500 mb-1 block">توضیحات (اختیاری)</label>
               <textarea
                 className="w-full rounded-xl border border-brand-100 p-3 text-sm"
@@ -390,6 +450,10 @@ export default function RequestWizard() {
             <p className="text-sm text-ink-500">زمان‌بندی</p>
             <p className="font-medium text-ink-900 mb-3">
               {scheduleMode === "ONCE" ? "یک‌بار" : `دوره‌ای — ${frequency === "WEEKLY" ? "هفتگی" : frequency === "BIWEEKLY" ? "دو هفته یک‌بار" : "ماهانه"}`}
+            </p>
+            <p className="text-sm text-ink-500">ترجیح شما</p>
+            <p className="font-medium text-ink-900 mb-3">
+              {greenIntent === "SELL" ? "💰 فروش — واریز به کیف‌پول" : "🌱 کمک به اثر سبز"}
             </p>
             <p className="text-sm text-ink-500">ارزش تخمینی</p>
             <p className="font-bold text-brand-600 text-lg mb-1">{formatToman(estimatedValue)} تومان</p>

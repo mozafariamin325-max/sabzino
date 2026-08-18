@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "notifications",
     "audit",
     "green_impact",
+    "store",
 ]
 
 MIDDLEWARE = [
@@ -108,7 +109,11 @@ STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
 MEDIA_URL = "media/"
-MEDIA_ROOT = BASE_DIR / "media"
+# On Liara, mount a persistent Disk (see deployment guide) and point this at
+# its path via MEDIA_ROOT env var — otherwise uploaded files (collector
+# documents, request photos) are lost on every redeploy since the container
+# filesystem itself is ephemeral.
+MEDIA_ROOT = config("MEDIA_ROOT", default=str(BASE_DIR / "media"))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -145,7 +150,28 @@ SPECTACULAR_SETTINGS = {
 }
 
 CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL", default=True, cast=bool)
+CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())
 CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="", cast=Csv())
+
+# ---- Production hosting (Liara / Arvan / any PaaS behind a TLS-terminating proxy) ----
+# The platform's load balancer talks HTTPS to the outside world but plain HTTP to
+# the container; without this, Django can't tell a request was actually secure
+# (breaks request.is_secure(), SECURE_SSL_REDIRECT, and CSRF origin checks).
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=0, cast=int)  # opt-in once HTTPS is confirmed stable
+
+# ---- Logging: plain stdout so `liara logs` / any PaaS log viewer shows real errors ----
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": config("DJANGO_LOG_LEVEL", default="INFO")},
+}
 
 # ---- SABZINO business config (Admin-tunable defaults; overridable via PlatformSetting model) ----
 SABZINO_DEFAULT_COMMISSION_PERCENT = config("SABZINO_DEFAULT_COMMISSION_PERCENT", default=10, cast=float)

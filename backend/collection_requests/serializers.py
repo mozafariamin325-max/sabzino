@@ -57,7 +57,7 @@ class CollectionRequestSerializer(serializers.ModelSerializer):
         model = CollectionRequest
         fields = (
             "uid", "code", "materials", "items", "amount_range", "amount_range_display", "address_text_snapshot",
-            "lat", "lng", "preferred_time", "description", "photo", "estimated_value",
+            "lat", "lng", "preferred_time", "green_intent", "description", "photo", "estimated_value",
             "status", "status_display", "status_logs", "assignment", "weighing", "created_at",
         )
 
@@ -82,7 +82,7 @@ class CreateCollectionRequestSerializer(serializers.ModelSerializer):
         model = CollectionRequest
         fields = (
             "material_ids", "amount_range", "items_json", "address", "address_text_snapshot",
-            "lat", "lng", "preferred_time", "description", "photo",
+            "lat", "lng", "preferred_time", "green_intent", "description", "photo",
         )
 
     def validate_items_json(self, value):

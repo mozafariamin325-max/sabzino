@@ -97,6 +97,7 @@ export interface CollectionRequest {
   lat: string | null;
   lng: string | null;
   preferred_time: string | null;
+  green_intent: "SELL" | "DONATE";
   description: string;
   photo: string | null;
   estimated_value: string;
@@ -106,6 +107,81 @@ export interface CollectionRequest {
   assignment: Assignment | null;
   weighing: WeighingRecord | null;
   created_at: string;
+}
+
+export interface AdminCollector {
+  id: number;
+  uid: string;
+  user: number;
+  full_name: string;
+  user_phone: string;
+  national_id: string;
+  city: string;
+  service_area: string;
+  bank_account_number: string;
+  sheba_number: string;
+  verification_status: "PENDING" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "SUSPENDED";
+  verification_note: string;
+  is_online: boolean;
+  rating_avg: string;
+  completed_jobs: number;
+  cancelled_jobs: number;
+  acceptance_rate: number;
+}
+
+export interface AdminWithdrawal {
+  uid: string;
+  amount: string;
+  sheba_number: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "PAID";
+  note: string;
+  created_at: string;
+  updated_at: string;
+  user_name: string;
+  user_phone: string | null;
+  processed_by_name: string | null;
+}
+
+export type StorePartnerCategory = "FOOD" | "HOUSEHOLD" | "DIGITAL" | "HEALTH" | "SERVICES" | "OTHER";
+
+export interface StorePartner {
+  uid: string;
+  name: string;
+  category: StorePartnerCategory;
+  logo: string | null;
+  description: string;
+  address: string;
+  contact_phone: string;
+  redeem_instructions: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface StoreRedemption {
+  uid: string;
+  partner: number;
+  partner_name: string;
+  partner_logo: string | null;
+  amount: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "FULFILLED";
+  redemption_code: string;
+  note: string;
+  created_at: string;
+}
+
+export interface AdminStoreRedemption {
+  uid: string;
+  partner: number;
+  partner_name: string;
+  amount: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "FULFILLED";
+  redemption_code: string;
+  note: string;
+  created_at: string;
+  updated_at: string;
+  user_name: string;
+  user_phone: string | null;
+  processed_by_name: string | null;
 }
 
 export interface RecyclingStation {
@@ -176,6 +252,7 @@ export interface User {
   avatar: string | null;
   referral_code: string;
   customer_type: "INDIVIDUAL" | "ORGANIZATION";
+  city: string;
   roles: Role[];
   organization_detail: OrganizationDetail | null;
   is_staff: boolean;

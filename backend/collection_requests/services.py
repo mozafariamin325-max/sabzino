@@ -65,6 +65,11 @@ def find_nearby_open_requests(collector_profile, limit=20):
 def accept_request(collector_profile, request_obj: CollectionRequest):
     if request_obj.status != RequestStatus.SEARCHING_COLLECTOR:
         raise ValueError("این درخواست دیگر در دسترس نیست.")
+    if collector_profile.verification_status != "APPROVED":
+        # Defense-in-depth: ToggleOnlineView already blocks a non-approved
+        # collector from going online, but this guards direct API calls too
+        # (e.g. a collector suspended mid-session, or a stale client).
+        raise ValueError("حساب شما تأیید نشده یا تعلیق شده است و امکان پذیرش درخواست را ندارید.")
     assignment = CollectionAssignment.objects.create(
         request=request_obj, collector=collector_profile, accepted_at=timezone.now()
     )
@@ -103,6 +108,85 @@ def complete_weighing(request_obj: CollectionRequest, material, weight_kg: Decim
         collector.save(update_fields=["completed_jobs"])
 
     log_status(request_obj, RequestStatus.COMPLETED, note="وزن‌کشی و تسویه انجام شد", changed_by=weighed_by)
+    return record
+
+
+@transaction.atomic
+def admin_edit_request(request_obj: CollectionRequest, changes: dict, reason: str, changed_by=None):
+    """
+    Admin corrects request details (address/description) — spec ask: "اصلاح"
+    from the admin dashboard. Deliberately limited to non-financial,
+    non-status fields so this can never be used to silently move a request
+    through the pipeline; every edit is logged with a mandatory reason.
+    """
+    if not reason:
+        raise ValueError("ذکر دلیل اصلاح الزامی است.")
+    allowed_fields = {"address_text_snapshot", "description"}
+    applied = {}
+    for field, value in (changes or {}).items():
+        if field in allowed_fields:
+            setattr(request_obj, field, value)
+            applied[field] = value
+    if not applied:
+        raise ValueError("هیچ فیلد قابل‌ویرایشی ارسال نشده است.")
+    request_obj.save(update_fields=list(applied.keys()) + ["updated_at"])
+    CollectionStatusLog.objects.create(
+        request=request_obj, status=request_obj.status,
+        note=f"ویرایش توسط مدیر ({'، '.join(applied.keys())}) — دلیل: {reason}",
+        changed_by=changed_by,
+    )
+    return request_obj
+
+
+@transaction.atomic
+def admin_override_weighing(request_obj: CollectionRequest, weight_kg: Decimal, reason: str, changed_by=None, total_value: Decimal = None):
+    """
+    Admin corrects an already-settled weighing (spec ask: "اصلاح" a
+    completed request). Reverses/reissues the wallet credit and the green
+    points delta so the citizen's balance always reflects the corrected
+    numbers, never a stale duplicate — with a mandatory reason logged both
+    on the request timeline and as its own wallet ledger row.
+    """
+    from wallet.services import adjust_wallet
+    from wallet.models import WalletTransactionType
+    from rewards.services import award_points
+    from core.services import get_points_per_kg
+
+    if not reason:
+        raise ValueError("ذکر دلیل اصلاح الزامی است.")
+    record = getattr(request_obj, "weighing", None)
+    if not record:
+        raise ValueError("این درخواست هنوز وزن‌کشی نشده است.")
+    if weight_kg <= 0:
+        raise ValueError("وزن باید بزرگ‌تر از صفر باشد.")
+
+    old_total, old_points = record.total_value, record.points_awarded
+    new_total = total_value if total_value is not None else (record.unit_price_snapshot * weight_kg).quantize(Decimal("1"))
+    new_points = int((get_points_per_kg() * weight_kg).quantize(Decimal("1")))
+    value_diff, points_diff = new_total - old_total, new_points - old_points
+
+    record.weight_kg = weight_kg
+    record.total_value = new_total
+    record.points_awarded = new_points
+    record.save(update_fields=["weight_kg", "total_value", "points_awarded"])
+
+    if value_diff != 0:
+        adjust_wallet(
+            request_obj.citizen, value_diff,
+            WalletTransactionType.REFUND if value_diff > 0 else WalletTransactionType.DEBIT,
+            description=f"اصلاح ادمین وزن‌کشی {request_obj.code} — دلیل: {reason}", reference=request_obj.code,
+        )
+    if points_diff != 0:
+        award_points(
+            request_obj.citizen, points_diff, "ADMIN_ADJUST",
+            description=f"اصلاح ادمین وزن‌کشی {request_obj.code}", reference=request_obj.code,
+        )
+
+    CollectionStatusLog.objects.create(
+        request=request_obj, status=request_obj.status,
+        note=f"اصلاح وزن‌کشی توسط مدیر ({old_total} ← {new_total} تومان) — دلیل: {reason}",
+        changed_by=changed_by,
+    )
     return record
 
 

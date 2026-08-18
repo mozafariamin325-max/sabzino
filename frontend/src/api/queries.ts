@@ -9,6 +9,8 @@ import type {
   MaterialPrice, City, Challenge, LeaderboardRow, NeighborhoodLeaderboardRow,
   MyImpact, ClassifyResult, NearbyCollector,
   ImpactProject, ImpactContribution, MyGreenImpact, ImpactDashboard,
+  AdminCollector, AdminWithdrawal,
+  StorePartner, StoreRedemption, AdminStoreRedemption, StorePartnerCategory,
 } from "./types";
 
 // ---------------- AUTH ----------------
@@ -31,6 +33,7 @@ export function useRegister() {
       password: string; role?: string; referral_code?: string;
       customer_type?: "INDIVIDUAL" | "ORGANIZATION";
       center_name?: string; manager_name?: string; manager_phone?: string;
+      city: string;
     }) => {
       const { data } = await api.post("/auth/register/", payload);
       return data;
@@ -234,6 +237,163 @@ export function useAdminCharts(days = 30) {
   });
 }
 
+// ---------------- ADMIN: COLLECTOR (DRIVER) ACCOUNT MANAGEMENT ----------------
+export function useAdminCollectors(params?: { verification_status?: string; search?: string }) {
+  return useQuery({
+    queryKey: ["admin-collectors", params],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<AdminCollector> | AdminCollector[]>("/collectors/admin/", { params });
+      return Array.isArray(data) ? data : data.results;
+    },
+  });
+}
+
+export function useSuspendCollector() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, note }: { id: number; note: string }) =>
+      (await api.post(`/collectors/admin/${id}/suspend/`, { note })).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-collectors"] }),
+  });
+}
+
+export function useReactivateCollector() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, note }: { id: number; note?: string }) =>
+      (await api.post(`/collectors/admin/${id}/reactivate/`, { note: note || "" })).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-collectors"] }),
+  });
+}
+
+// ---------------- ADMIN: WITHDRAWAL REQUESTS (کیف پول — برداشت وجه) ----------------
+export function useAdminWithdrawals(params?: { status?: string }) {
+  return useQuery({
+    queryKey: ["admin-withdrawals", params],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<AdminWithdrawal> | AdminWithdrawal[]>("/wallet/admin/withdrawals/", { params });
+      return Array.isArray(data) ? data : data.results;
+    },
+    refetchInterval: 20_000,
+  });
+}
+
+export function useDecideWithdrawal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ uid, action, note }: { uid: string; action: "approve" | "reject" | "mark_paid"; note?: string }) =>
+      (await api.post(`/wallet/admin/withdrawals/${uid}/${action}/`, { note: note || "" })).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-withdrawals"] }),
+  });
+}
+
+// ---------------- ADMIN: STORE PARTNERS + REDEMPTIONS (فروشگاه سبزینو) ----------------
+export function useAdminStorePartners() {
+  return useQuery({
+    queryKey: ["admin-store-partners"],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<StorePartner> | StorePartner[]>("/store/partners/");
+      return Array.isArray(data) ? data : data.results;
+    },
+  });
+}
+
+export function useCreateStorePartner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      name: string; category: StorePartnerCategory; description?: string;
+      address?: string; contact_phone?: string; redeem_instructions?: string;
+    }) => (await api.post("/store/partners/", payload)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-store-partners"] });
+      qc.invalidateQueries({ queryKey: ["store-partners"] });
+    },
+  });
+}
+
+export function useUpdateStorePartner() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ uid, ...payload }: { uid: string } & Partial<{
+      name: string; category: StorePartnerCategory; description: string;
+      address: string; contact_phone: string; redeem_instructions: string; is_active: boolean;
+    }>) => (await api.patch(`/store/partners/${uid}/`, payload)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-store-partners"] });
+      qc.invalidateQueries({ queryKey: ["store-partners"] });
+    },
+  });
+}
+
+export function useAdminStoreRedemptions(params?: { status?: string }) {
+  return useQuery({
+    queryKey: ["admin-store-redemptions", params],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<AdminStoreRedemption> | AdminStoreRedemption[]>("/store/admin/redemptions/", { params });
+      return Array.isArray(data) ? data : data.results;
+    },
+    refetchInterval: 20_000,
+  });
+}
+
+export function useDecideStoreRedemption() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ uid, action, note }: { uid: string; action: "approve" | "reject" | "mark_fulfilled"; note?: string }) =>
+      (await api.post(`/store/admin/redemptions/${uid}/${action}/`, { note: note || "" })).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-store-redemptions"] }),
+  });
+}
+
+// ---------------- ADMIN: COLLECTION REQUEST OVERSIGHT (رصد + اصلاح درخواست‌ها) ----------------
+export function useAdminRequests(params?: { status?: string; search?: string }) {
+  return useQuery({
+    queryKey: ["admin-requests", params],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<CollectionRequest> | CollectionRequest[]>("/collections/admin/", { params });
+      return Array.isArray(data) ? data : data.results;
+    },
+    refetchInterval: 20_000,
+  });
+}
+
+export function useAdminEditRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ uid, reason, ...changes }: { uid: string; reason: string; address_text_snapshot?: string; description?: string }) => {
+      const { data } = await api.post(`/collections/admin/${uid}/edit/`, { reason, ...changes });
+      if (data?.success === false) throw new Error(data.message || "خطا در ویرایش درخواست");
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-requests"] }),
+  });
+}
+
+export function useAdminCancelRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ uid, reason }: { uid: string; reason: string }) => {
+      const { data } = await api.post(`/collections/admin/${uid}/cancel/`, { reason });
+      if (data?.success === false) throw new Error(data.message || "خطا در لغو درخواست");
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-requests"] }),
+  });
+}
+
+export function useAdminOverrideWeighing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ uid, weight_kg, total_value, reason }: { uid: string; weight_kg: number; total_value?: number; reason: string }) => {
+      const { data } = await api.post(`/collections/admin/${uid}/override_weighing/`, { weight_kg, total_value, reason });
+      if (data?.success === false) throw new Error(data.message || "خطا در اصلاح وزن‌کشی");
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-requests"] }),
+  });
+}
+
 // ---------------- CATALOG ----------------
 export function useMaterialCategories() {
   return useQuery({
@@ -277,6 +437,19 @@ export function usePricing() {
 }
 
 // ---------------- CITIES / LOCAL IDENTITY ----------------
+export function useIdentityCities() {
+  return useQuery({
+    queryKey: ["cities", "identity-all"],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<City> | City[]>("/locations/cities/", {
+        params: { has_identity: true },
+      });
+      return Array.isArray(data) ? data : data.results;
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useActiveIdentityCity() {
   return useQuery({
     queryKey: ["cities", "active-identity"],
@@ -392,6 +565,40 @@ export function useRequestWithdrawal() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["wallet"] });
       qc.invalidateQueries({ queryKey: ["wallet-transactions"] });
+    },
+  });
+}
+
+// ---------------- STORE (فروشگاه سبزینو — خرج کیف‌پول در فروشگاه‌های همکار واقعی) ----------------
+export function useStorePartners(params?: { category?: string }) {
+  return useQuery({
+    queryKey: ["store-partners", params],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<StorePartner> | StorePartner[]>("/store/partners/", { params });
+      return Array.isArray(data) ? data : data.results;
+    },
+  });
+}
+
+export function useMyStoreRedemptions() {
+  return useQuery({
+    queryKey: ["store-redemptions"],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<StoreRedemption> | StoreRedemption[]>("/store/redemptions/");
+      return Array.isArray(data) ? data : data.results;
+    },
+  });
+}
+
+export function useRequestStoreRedemption() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { partner: string; amount: number }) =>
+      (await api.post("/store/redemptions/request/", payload)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: ["wallet-transactions"] });
+      qc.invalidateQueries({ queryKey: ["store-redemptions"] });
     },
   });
 }

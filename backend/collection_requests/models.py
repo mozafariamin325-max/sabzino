@@ -15,6 +15,11 @@ class RequestStatus(models.TextChoices):
     CANCELLED = "CANCELLED", "لغو شده"
 
 
+class GreenIntent(models.TextChoices):
+    SELL = "SELL", "فروش (واریز به کیف‌پول)"
+    DONATE = "DONATE", "کمک به اثر سبز"
+
+
 class AmountRange(models.TextChoices):
     UNDER_5 = "UNDER_5", "کمتر از ۵ کیلو"
     R5_10 = "R5_10", "۵ تا ۱۰ کیلو"
@@ -39,6 +44,10 @@ class CollectionRequest(TimeStampedModel, UUIDModel):
     lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     preferred_time = models.DateTimeField(null=True, blank=True)
+    green_intent = models.CharField(
+        max_length=8, choices=GreenIntent.choices, default=GreenIntent.SELL,
+        help_text="ترجیح غیرالزام‌آور شهروند هنگام ثبت درخواست — فقط پیش‌فرض تخصیص «اثر سبز» پس از وزن‌کشی را تعیین می‌کند؛ مبلغ و سهم نهایی همچنان اختیاری و پس از وزن‌کشی مشخص می‌شود.",
+    )
     description = models.TextField(blank=True)
     photo = models.ImageField(upload_to="collection_requests/photos/", null=True, blank=True)
     estimated_value = models.DecimalField(max_digits=12, decimal_places=0, default=0, help_text="Toman, computed at creation")

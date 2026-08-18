@@ -44,7 +44,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = (
             "id", "uid", "username", "first_name", "last_name", "email",
-            "phone_number", "phone_verified", "avatar", "referral_code", "customer_type",
+            "phone_number", "phone_verified", "avatar", "referral_code", "customer_type", "city",
             "roles", "organization_detail", "is_staff", "date_joined",
         )
         read_only_fields = ("id", "uid", "referral_code", "date_joined", "is_staff")
@@ -58,13 +58,21 @@ class RegisterSerializer(serializers.ModelSerializer):
     center_name = serializers.CharField(required=False, allow_blank=True, write_only=True)
     manager_name = serializers.CharField(required=False, allow_blank=True, write_only=True)
     manager_phone = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    city = serializers.CharField(required=True, help_text="شهر کاربر — برای نمایش هویت محلی صفحه اصلی، هنگام ثبت‌نام پرسیده می‌شود")
 
     class Meta:
         model = User
         fields = (
             "first_name", "last_name", "email", "phone_number", "password", "role", "referral_code",
-            "customer_type", "center_name", "manager_name", "manager_phone",
+            "customer_type", "center_name", "manager_name", "manager_phone", "city",
         )
+
+    def validate_city(self, value):
+        from locations.models import City
+
+        if not City.objects.filter(name=value).exists():
+            raise serializers.ValidationError("شهر انتخاب‌شده معتبر نیست.")
+        return value
 
     def validate(self, attrs):
         if not attrs.get("email") and not attrs.get("phone_number"):
@@ -115,6 +123,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             referral_code=generate_referral_code(),
             referred_by=referred_by,
             customer_type=customer_type,
+            city=validated_data.get("city") or "یاسوج",
         )
         user.set_password(password)
         user.save()

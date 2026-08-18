@@ -1,9 +1,14 @@
+from decimal import Decimal, InvalidOperation
 from rest_framework import generics, views, viewsets, permissions, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
 from .models import CollectionRequest, RequestStatus, RecurringSchedule
 from .serializers import CollectionRequestSerializer, CreateCollectionRequestSerializer, WeighInSerializer, RecurringScheduleSerializer
-from .services import log_status, find_nearby_open_requests, accept_request, complete_weighing
+from .services import (
+    log_status, find_nearby_open_requests, accept_request, complete_weighing,
+    admin_edit_request, admin_override_weighing,
+)
 
 
 class CollectionRequestViewSet(viewsets.ModelViewSet):
@@ -133,3 +138,64 @@ class WeighInView(views.APIView):
             "success": True, "message": "وزن‌کشی و تسویه با موفقیت انجام شد.",
             "weighing": {"weight_kg": str(record.weight_kg), "total_value": str(record.total_value), "points_awarded": record.points_awarded},
         })
+
+
+class AdminCollectionRequestViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Admin oversight of the whole request pipeline (spec ask: "رصد" + "اصلاح"
+    از داشبورد مدیر). Read-only list/retrieve for monitoring, plus three
+    narrow, fully-audited write actions — never a raw PATCH/PUT/DELETE, so
+    an admin can never silently bypass the normal citizen/collector flow.
+    """
+
+    queryset = CollectionRequest.objects.select_related("citizen", "assignment__collector__user").prefetch_related(
+        "materials", "status_logs", "weighing"
+    ).all()
+    serializer_class = CollectionRequestSerializer
+    permission_classes = [permissions.IsAdminUser]
+    lookup_field = "uid"
+    filterset_fields = ["status"]
+    search_fields = ["code", "citizen__first_name", "citizen__last_name", "citizen__phone_number"]
+
+    @action(detail=True, methods=["post"])
+    def edit(self, request, uid=None):
+        obj = self.get_object()
+        reason = request.data.get("reason", "")
+        changes = {k: v for k, v in request.data.items() if k in ("address_text_snapshot", "description")}
+        try:
+            admin_edit_request(obj, changes, reason, changed_by=request.user)
+        except ValueError as e:
+            return Response({"success": False, "message": str(e)}, status=400)
+        return Response({"success": True, "message": "درخواست ویرایش شد.", "request": CollectionRequestSerializer(obj).data})
+
+    @action(detail=True, methods=["post"])
+    def override_weighing(self, request, uid=None):
+        obj = self.get_object()
+        reason = request.data.get("reason", "")
+        try:
+            weight_kg = Decimal(str(request.data.get("weight_kg")))
+        except (InvalidOperation, TypeError):
+            return Response({"success": False, "message": "وزن نامعتبر است."}, status=400)
+        raw_total = request.data.get("total_value")
+        try:
+            total_value = Decimal(str(raw_total)) if raw_total not in (None, "") else None
+        except InvalidOperation:
+            return Response({"success": False, "message": "مبلغ نامعتبر است."}, status=400)
+        try:
+            admin_override_weighing(obj, weight_kg, reason, changed_by=request.user, total_value=total_value)
+        except ValueError as e:
+            return Response({"success": False, "message": str(e)}, status=400)
+        return Response({"success": True, "message": "وزن‌کشی اصلاح شد.", "request": CollectionRequestSerializer(obj).data})
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, uid=None):
+        obj = self.get_object()
+        reason = request.data.get("reason", "")
+        if not reason:
+            return Response({"success": False, "message": "ذکر دلیل لغو الزامی است."}, status=400)
+        if obj.status in (RequestStatus.COMPLETED, RequestStatus.CANCELLED):
+            return Response({"success": False, "message": "این درخواست قابل لغو نیست."}, status=400)
+        log_status(obj, RequestStatus.CANCELLED, note=f"لغو توسط مدیر — دلیل: {reason}", changed_by=request.user)
+        obj.cancelled_reason = reason
+        obj.save(update_fields=["cancelled_reason", "updated_at"])
+        return Response({"success": True, "message": "درخواست لغو شد.", "request": CollectionRequestSerializer(obj).data})

@@ -102,9 +102,54 @@ class Command(BaseCommand):
         for d in DISTRICTS_YASUJ:
             District.objects.get_or_create(city=city, name=d)
 
+        # گچساران و دهدشت هم در همان استان کهگیلویه و بویراحمد — هویت محلی فعال
+        other_kb_cities = [
+            (
+                "گچساران", Decimal("30.3592"), Decimal("50.7981"),
+                "سرزمین آب و آتش", "🔥", "#3a2a0b", "#c2790f",
+                "از دل نفت و طبیعت، برای یک گچساران سبزتر",
+            ),
+            (
+                "دهدشت", Decimal("30.7811"), Decimal("50.5708"),
+                "دشت باستانی کهگیلویه", "🏛️", "#2b3d0b", "#6b9c1c",
+                "دیار کهن کهگیلویه، سرسبز و پاکیزه",
+            ),
+        ]
+        for name, lat, lng, landmark, icon, color_from, color_to, tagline in other_kb_cities:
+            c, _ = City.objects.get_or_create(province=province, name=name, defaults={"lat": lat, "lng": lng})
+            c.lat, c.lng = lat, lng
+            c.has_identity = True
+            c.landmark_name = landmark
+            c.landmark_icon = icon
+            c.theme_color_from = color_from
+            c.theme_color_to = color_to
+            c.hero_tagline = tagline
+            c.save(update_fields=[
+                "lat", "lng", "has_identity", "landmark_name", "landmark_icon",
+                "theme_color_from", "theme_color_to", "hero_tagline",
+            ])
+
+        # شیراز و اصفهان — هویت محلی فعال (طبق درخواست کاربر)؛ تهران فعلاً خفته می‌ماند
+        active_other_cities = [
+            ("فارس", "شیراز", Decimal("29.5918"), Decimal("52.5837"), "تخت جمشید", "🏛️", "#4a2e0b", "#c2830f", "شهر گل و بلبل، حالا شهر بازیافت هم"),
+            ("اصفهان", "اصفهان", Decimal("32.6546"), Decimal("51.6680"), "سی‌وسه‌پل", "🌉", "#0b2e4a", "#1c7fa6", "نصف جهان، نیمی هم برای طبیعت"),
+        ]
+        for prov_name, city_name, lat, lng, landmark, icon, color_from, color_to, tagline in active_other_cities:
+            prov, _ = Province.objects.get_or_create(name=prov_name)
+            c, _ = City.objects.get_or_create(province=prov, name=city_name, defaults={"lat": lat, "lng": lng})
+            c.lat, c.lng = lat, lng
+            c.has_identity = True
+            c.landmark_name = landmark
+            c.landmark_icon = icon
+            c.theme_color_from = color_from
+            c.theme_color_to = color_to
+            c.hero_tagline = tagline
+            c.save(update_fields=[
+                "lat", "lng", "has_identity", "landmark_name", "landmark_icon",
+                "theme_color_from", "theme_color_to", "hero_tagline",
+            ])
+
         dormant_cities = [
-            ("فارس", "شیراز", "تخت جمشید", "🏛️"),
-            ("اصفهان", "اصفهان", "سی‌وسه‌پل", "🌉"),
             ("تهران", "تهران", "برج میلاد", "🌆"),
         ]
         for prov_name, city_name, landmark, icon in dormant_cities:

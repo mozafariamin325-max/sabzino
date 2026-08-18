@@ -10,7 +10,7 @@ export default function Marketplace() {
 
   return (
     <div>
-      <TopBar title="فروشگاه سبزینو" subtitle="بازارگاه خرید و فروش مواد قابل بازیافت" />
+      <TopBar title="بازار عمده ضایعات" subtitle="بازارگاه خرید و فروش عمده مواد قابل بازیافت (B2B)" />
       <div className="px-4">
         {isLoading ? (
           <CenterLoading />

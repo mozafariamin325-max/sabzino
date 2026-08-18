@@ -117,7 +117,7 @@ export default function RequestDetail() {
         )}
 
         {req.status === "COMPLETED" && req.weighing && (
-          <GreenImpactChoice requestUid={req.uid} totalValue={Number(req.weighing.total_value)} />
+          <GreenImpactChoice requestUid={req.uid} totalValue={Number(req.weighing.total_value)} greenIntent={req.green_intent} />
         )}
 
         {canCancel && (
@@ -222,15 +222,21 @@ function CollectorRating({
  * whichever projects the citizen taps on (toggle chips, not per-item drag —
  * keeps the "sum always = 100%" invariant trivially true, no rebalancing
  * math to get wrong). Defaults to 100% cash — nothing is ever pre-selected
- * on the citizen's behalf.
+ * on the citizen's behalf — UNLESS the citizen already told us, upfront in
+ * the request wizard, that this delivery was meant for «اثر سبز» (green
+ * intent). That's a non-binding preference, so it only pre-configures this
+ * panel's starting point (opened, cash share nudged to 0%); the citizen
+ * still has to actively pick projects and confirm before anything moves.
  */
-function GreenImpactChoice({ requestUid, totalValue }: { requestUid: string; totalValue: number }) {
+function GreenImpactChoice({ requestUid, totalValue, greenIntent }: {
+  requestUid: string; totalValue: number; greenIntent: "SELL" | "DONATE";
+}) {
   const { data: existing, isLoading: existingLoading } = useMyContributions({ request: requestUid });
   const { data: projects } = useImpactProjects({ status: "ACTIVE" });
   const contribute = useContribute();
 
-  const [open, setOpen] = useState(false);
-  const [cashPct, setCashPct] = useState(100);
+  const [open, setOpen] = useState(greenIntent === "DONATE");
+  const [cashPct, setCashPct] = useState(greenIntent === "DONATE" ? 0 : 100);
   const [selected, setSelected] = useState<string[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastContributions, setLastContributions] = useState<NonNullable<typeof existing>>([]);

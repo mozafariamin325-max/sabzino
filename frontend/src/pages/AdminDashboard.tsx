@@ -9,10 +9,17 @@ import {
   downloadAdminExport, useAdminCharts, useDecideVerification, useGlobalSearch, useVerificationCenter,
   useAdminPricing, useSetPrice, useAllCities, useUpdateCity, useChallenges, useListings, useAdminPurchaseRequests,
   useImpactDashboard, useImpactProjects, useCreateImpactProject, useUpdateImpactProject,
+  useAdminCollectors, useSuspendCollector, useReactivateCollector,
+  useAdminWithdrawals, useDecideWithdrawal,
+  useAdminRequests, useAdminEditRequest, useAdminCancelRequest, useAdminOverrideWeighing,
+  useAdminStorePartners, useCreateStorePartner, useUpdateStorePartner, useAdminStoreRedemptions, useDecideStoreRedemption,
 } from "../api/queries";
 import { Button, Card, CenterLoading, DemoBadge, EmptyState, TopBar } from "../components/ui";
-import { formatKg, formatNumber, formatToman } from "../lib/format";
-import { IMPACT_CATEGORY_LABELS, type ImpactCategory, type ImpactProject } from "../api/types";
+import { formatKg, formatNumber, formatToman, toJalali } from "../lib/format";
+import {
+  IMPACT_CATEGORY_LABELS, type ImpactCategory, type ImpactProject, type AdminCollector, type AdminWithdrawal,
+  type CollectionRequest, type StorePartnerCategory, type AdminStoreRedemption,
+} from "../api/types";
 import brandmark from "../assets/brand/brandmark-256.png";
 
 const CHART_COLORS = { primary: "#16a34a", secondary: "#0ea5e9", danger: "#dc2626", muted: "#94a3b8" };
@@ -25,7 +32,9 @@ function jalaliDay(iso: string) {
   }
 }
 
-type Tab = "overview" | "verification" | "charts" | "prices" | "missions" | "cities" | "b2b" | "impact" | "tools";
+type Tab =
+  | "overview" | "verification" | "charts" | "prices" | "missions" | "cities" | "b2b" | "impact" | "tools"
+  | "drivers" | "withdrawals" | "requests" | "store";
 
 export default function AdminDashboard() {
   const user = useAuthStore((s) => s.user);
@@ -124,6 +133,10 @@ export default function AdminDashboard() {
             {([
               ["overview", "📊 نمای کلی"],
               ["verification", `✅ تأیید ثبت‌نام‌ها${data.pending_verifications ? ` (${data.pending_verifications})` : ""}`],
+              ["requests", "📋 درخواست‌های جمع‌آوری"],
+              ["drivers", "🚚 حساب رانندگان"],
+              ["withdrawals", "💳 برداشت وجه"],
+              ["store", "🛍️ فروشگاه سبزینو"],
               ["charts", "📈 نمودارها"],
               ["prices", "🏷️ قیمت‌ها"],
               ["missions", "🎯 ماموریت‌ها"],
@@ -177,6 +190,10 @@ export default function AdminDashboard() {
         )}
 
         {isStaff && tab === "verification" && <VerificationTab />}
+        {isStaff && tab === "requests" && <RequestsTab />}
+        {isStaff && tab === "drivers" && <DriversTab />}
+        {isStaff && tab === "withdrawals" && <WithdrawalsTab />}
+        {isStaff && tab === "store" && <StoreTab />}
         {isStaff && tab === "charts" && <ChartsTab />}
         {isStaff && tab === "prices" && <PricesTab />}
         {isStaff && tab === "missions" && <MissionsTab />}
@@ -772,6 +789,614 @@ const TYPE_LABELS: Record<string, string> = {
   collector: "جمع‌آور", organization: "مشتری سازمانی", recycling_center: "مرکز بازیافت",
   factory: "کارخانه", wholesaler: "خریدار عمده", business: "کسب‌وکار", profile_change: "تغییر پروفایل",
 };
+
+function ReasonModal({
+  title, placeholder, loading, error, onCancel, onSubmit,
+}: {
+  title: string; placeholder: string; loading: boolean; error?: string;
+  onCancel: () => void; onSubmit: (note: string) => void;
+}) {
+  const [note, setNote] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4 sm:pb-0">
+      <div className="w-full max-w-sm bg-white rounded-3xl p-5">
+        <p className="text-sm font-bold text-ink-900 mb-3">{title}</p>
+        <textarea
+          className="w-full rounded-lg border border-brand-100 px-3 py-2 text-sm"
+          rows={3}
+          placeholder={placeholder}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          autoFocus
+        />
+        {error && <p className="text-red-600 text-xs mt-2">{error}</p>}
+        <div className="flex gap-2 mt-4">
+          <Button variant="secondary" className="flex-1" onClick={onCancel}>انصراف</Button>
+          <Button variant="danger" className="flex-1" loading={loading} disabled={!note.trim()} onClick={() => onSubmit(note.trim())}>
+            ثبت
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const COLLECTOR_STATUS_LABELS: Record<string, string> = {
+  PENDING: "در انتظار بررسی", UNDER_REVIEW: "در حال بررسی", APPROVED: "تأیید شده", REJECTED: "رد شده", SUSPENDED: "معلق",
+};
+const COLLECTOR_STATUS_COLORS: Record<string, string> = {
+  PENDING: "bg-amber-50 text-amber-700", UNDER_REVIEW: "bg-sky-50 text-sky-700",
+  APPROVED: "bg-brand-50 text-brand-700", REJECTED: "bg-slate-100 text-ink-500", SUSPENDED: "bg-red-50 text-red-700",
+};
+
+function DriversTab() {
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const { data, isLoading } = useAdminCollectors(statusFilter ? { verification_status: statusFilter } : undefined);
+  const suspend = useSuspendCollector();
+  const reactivate = useReactivateCollector();
+  const [suspendTarget, setSuspendTarget] = useState<AdminCollector | null>(null);
+
+  return (
+    <div className="flex flex-col gap-3 pb-6">
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-1">مدیریت حساب رانندگان (جمع‌آوران)</p>
+        <p className="text-[11px] text-ink-500 leading-5">
+          حساب یک راننده را در هر زمان — مثلاً به‌دلیل تخلف یا شکایت مشتری — می‌توانید معلق کنید؛ بلافاصله آفلاین می‌شود و تا فعال‌سازی مجدد امکان پذیرش درخواست جدید ندارد.
+        </p>
+      </Card>
+
+      <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1">
+        {[["", "همه"], ["APPROVED", "تأییدشده"], ["SUSPENDED", "معلق"], ["PENDING", "در انتظار"], ["REJECTED", "ردشده"]].map(([v, l]) => (
+          <button
+            key={v}
+            onClick={() => setStatusFilter(v)}
+            className={`text-[11px] px-3 py-1.5 rounded-lg whitespace-nowrap font-medium ${statusFilter === v ? "bg-brand-500 text-white" : "bg-white text-ink-600 border border-brand-100"}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <CenterLoading />
+      ) : !data?.length ? (
+        <EmptyState icon="🚚" title="راننده‌ای یافت نشد" />
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {data.map((c) => (
+            <Card key={c.id} className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-bold text-ink-900">{c.full_name || "بدون نام"}</p>
+                  <p className="text-[11px] text-ink-500 mt-0.5" dir="ltr">{c.user_phone}</p>
+                  <p className="text-[10.5px] text-ink-400 mt-0.5">{c.city}{c.service_area ? ` — ${c.service_area}` : ""}</p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${COLLECTOR_STATUS_COLORS[c.verification_status] || "bg-slate-100 text-ink-500"}`}>
+                  {COLLECTOR_STATUS_LABELS[c.verification_status] || c.verification_status}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 mt-2 text-[10.5px] text-ink-500">
+                <span>✅ {formatNumber(c.completed_jobs)} کار تکمیل‌شده</span>
+                <span>⭐ {c.rating_avg}</span>
+                <span>{c.is_online ? "🟢 آنلاین" : "⚪ آفلاین"}</span>
+              </div>
+              {c.verification_note && <p className="text-[10.5px] text-ink-400 mt-1.5">یادداشت: {c.verification_note}</p>}
+              {(c.verification_status === "SUSPENDED" || c.verification_status === "APPROVED") && (
+                <div className="flex gap-2 mt-3">
+                  {c.verification_status === "SUSPENDED" ? (
+                    <Button
+                      variant="secondary" className="flex-1 !py-2 !text-xs" loading={reactivate.isPending}
+                      onClick={() => reactivate.mutate({ id: c.id })}
+                    >
+                      فعال‌سازی مجدد
+                    </Button>
+                  ) : (
+                    <Button variant="danger" className="flex-1 !py-2 !text-xs" onClick={() => setSuspendTarget(c)}>
+                      تعلیق حساب
+                    </Button>
+                  )}
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {suspendTarget && (
+        <ReasonModal
+          title={`تعلیق حساب ${suspendTarget.full_name || "راننده"}`}
+          placeholder="دلیل تعلیق را بنویسید (الزامی)..."
+          loading={suspend.isPending}
+          error={(suspend.error as Error | undefined)?.message}
+          onCancel={() => setSuspendTarget(null)}
+          onSubmit={(note) => suspend.mutate({ id: suspendTarget.id, note }, { onSuccess: () => setSuspendTarget(null) })}
+        />
+      )}
+    </div>
+  );
+}
+
+const WITHDRAWAL_STATUS_LABELS: Record<string, string> = {
+  PENDING: "در انتظار بررسی", APPROVED: "تأییدشده — منتظر واریز", REJECTED: "رد شده", PAID: "پرداخت شد",
+};
+const WITHDRAWAL_STATUS_COLORS: Record<string, string> = {
+  PENDING: "bg-amber-50 text-amber-700", APPROVED: "bg-sky-50 text-sky-700",
+  REJECTED: "bg-slate-100 text-ink-500", PAID: "bg-brand-50 text-brand-700",
+};
+
+function WithdrawalsTab() {
+  const [statusFilter, setStatusFilter] = useState("PENDING");
+  const { data, isLoading } = useAdminWithdrawals(statusFilter ? { status: statusFilter } : undefined);
+  const decide = useDecideWithdrawal();
+  const [rejectTarget, setRejectTarget] = useState<AdminWithdrawal | null>(null);
+
+  return (
+    <div className="flex flex-col gap-3 pb-6">
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-1">درخواست‌های برداشت وجه</p>
+        <p className="text-[11px] text-ink-500 leading-5">
+          واریز واقعی به شماره شبا همچنان یک عملیات دستی بانکی است: پس از «تأیید»، مبلغ را به شماره شبا واریز کنید و سپس «پرداخت‌شد» را ثبت کنید. با «رد»، مبلغ به‌طور خودکار به کیف‌پول کاربر بازمی‌گردد.
+        </p>
+      </Card>
+
+      <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1">
+        {[["", "همه"], ["PENDING", "در انتظار"], ["APPROVED", "تأییدشده"], ["PAID", "پرداخت‌شده"], ["REJECTED", "ردشده"]].map(([v, l]) => (
+          <button
+            key={v}
+            onClick={() => setStatusFilter(v)}
+            className={`text-[11px] px-3 py-1.5 rounded-lg whitespace-nowrap font-medium ${statusFilter === v ? "bg-brand-500 text-white" : "bg-white text-ink-600 border border-brand-100"}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <CenterLoading />
+      ) : !data?.length ? (
+        <EmptyState icon="💳" title="درخواستی یافت نشد" />
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {data.map((w) => (
+            <Card key={w.uid} className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-bold text-ink-900">{w.user_name}</p>
+                  <p className="text-[11px] text-ink-500 mt-0.5" dir="ltr">{w.user_phone}</p>
+                  <p className="text-[10.5px] text-ink-400 mt-0.5" dir="ltr">شبا: {w.sheba_number || "—"}</p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${WITHDRAWAL_STATUS_COLORS[w.status]}`}>
+                  {WITHDRAWAL_STATUS_LABELS[w.status]}
+                </span>
+              </div>
+              <p className="text-base font-extrabold text-brand-700 mt-2">{formatToman(w.amount)} تومان</p>
+              <p className="text-[10.5px] text-ink-400 mt-0.5">{toJalali(w.created_at)}</p>
+              {w.note && <p className="text-[10.5px] text-ink-400 mt-1">یادداشت: {w.note}</p>}
+              {w.status === "PENDING" && (
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    className="flex-1 !py-2 !text-xs" loading={decide.isPending}
+                    onClick={() => decide.mutate({ uid: w.uid, action: "approve" })}
+                  >
+                    ✅ تأیید
+                  </Button>
+                  <Button variant="danger" className="flex-1 !py-2 !text-xs" onClick={() => setRejectTarget(w)}>
+                    ❌ رد
+                  </Button>
+                </div>
+              )}
+              {w.status === "APPROVED" && (
+                <Button full className="mt-3 !py-2 !text-xs" loading={decide.isPending} onClick={() => decide.mutate({ uid: w.uid, action: "mark_paid" })}>
+                  💸 پرداخت‌شد (پس از واریز بانکی)
+                </Button>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {rejectTarget && (
+        <ReasonModal
+          title={`رد درخواست برداشت ${rejectTarget.user_name}`}
+          placeholder="دلیل رد را بنویسید..."
+          loading={decide.isPending}
+          error={(decide.error as Error | undefined)?.message}
+          onCancel={() => setRejectTarget(null)}
+          onSubmit={(note) => decide.mutate({ uid: rejectTarget.uid, action: "reject", note }, { onSuccess: () => setRejectTarget(null) })}
+        />
+      )}
+    </div>
+  );
+}
+
+const STORE_CATEGORY_LABELS: Record<StorePartnerCategory, string> = {
+  FOOD: "خوراکی و سوپرمارکت", HOUSEHOLD: "لوازم خانه", DIGITAL: "دیجیتال و شارژ",
+  HEALTH: "سلامت و آرایشی", SERVICES: "خدمات", OTHER: "سایر",
+};
+const STORE_REDEMPTION_STATUS_LABELS: Record<string, string> = {
+  PENDING: "در انتظار بررسی", APPROVED: "تأییدشده — کد صادر شد", REJECTED: "رد شده", FULFILLED: "استفاده‌شده",
+};
+const STORE_REDEMPTION_STATUS_COLORS: Record<string, string> = {
+  PENDING: "bg-amber-50 text-amber-700", APPROVED: "bg-sky-50 text-sky-700",
+  REJECTED: "bg-slate-100 text-ink-500", FULFILLED: "bg-brand-50 text-brand-700",
+};
+
+function StoreTab() {
+  const [sub, setSub] = useState<"partners" | "redemptions">("partners");
+  return (
+    <div className="flex flex-col gap-3 pb-6">
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-1">فروشگاه سبزینو</p>
+        <p className="text-[11px] text-ink-500 leading-5">
+          فروشگاه‌های همکارِ واقعی شهر را اینجا ثبت کنید تا شهروندان بتوانند با موجودی کیف‌پول‌شان از آن‌ها خرید کنند؛ هیچ فروشگاهی به‌صورت خودکار اضافه نمی‌شود. درخواست‌های خرید هم مثل برداشت وجه به‌صورت نیمه‌دستی بررسی می‌شوند.
+        </p>
+      </Card>
+
+      <div className="flex gap-1.5">
+        <button
+          onClick={() => setSub("partners")}
+          className={`flex-1 text-xs px-3 py-2 rounded-lg font-medium ${sub === "partners" ? "bg-brand-500 text-white" : "bg-white text-ink-600 border border-brand-100"}`}
+        >
+          🏪 فروشگاه‌های همکار
+        </button>
+        <button
+          onClick={() => setSub("redemptions")}
+          className={`flex-1 text-xs px-3 py-2 rounded-lg font-medium ${sub === "redemptions" ? "bg-brand-500 text-white" : "bg-white text-ink-600 border border-brand-100"}`}
+        >
+          🧾 درخواست‌های خرید
+        </button>
+      </div>
+
+      {sub === "partners" ? <StorePartnersSubTab /> : <StoreRedemptionsSubTab />}
+    </div>
+  );
+}
+
+function PartnerFormModal({ onClose }: { onClose: () => void }) {
+  const create = useCreateStorePartner();
+  const [form, setForm] = useState({
+    name: "", category: "OTHER" as StorePartnerCategory, description: "",
+    address: "", contact_phone: "", redeem_instructions: "",
+  });
+
+  function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    await create.mutateAsync(form);
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4 sm:pb-0">
+      <div className="w-full max-w-sm bg-white rounded-3xl p-5 max-h-[85vh] overflow-y-auto">
+        <p className="text-sm font-bold text-ink-900 mb-3">افزودن فروشگاه همکار واقعی</p>
+        <form onSubmit={submit} className="flex flex-col gap-2.5">
+          <input
+            className="rounded-lg border border-brand-100 px-3 py-2 text-sm"
+            placeholder="نام فروشگاه (واقعی)" value={form.name} onChange={(e) => update("name", e.target.value)} required
+          />
+          <select
+            className="rounded-lg border border-brand-100 px-3 py-2 text-sm"
+            value={form.category} onChange={(e) => update("category", e.target.value as StorePartnerCategory)}
+          >
+            {Object.entries(STORE_CATEGORY_LABELS).map(([k, l]) => (
+              <option key={k} value={k}>{l}</option>
+            ))}
+          </select>
+          <input
+            className="rounded-lg border border-brand-100 px-3 py-2 text-sm"
+            placeholder="توضیح کوتاه (اختیاری)" value={form.description} onChange={(e) => update("description", e.target.value)}
+          />
+          <input
+            className="rounded-lg border border-brand-100 px-3 py-2 text-sm"
+            placeholder="آدرس (اختیاری)" value={form.address} onChange={(e) => update("address", e.target.value)}
+          />
+          <input
+            className="rounded-lg border border-brand-100 px-3 py-2 text-sm" dir="ltr"
+            placeholder="شماره تماس (اختیاری)" value={form.contact_phone} onChange={(e) => update("contact_phone", e.target.value)}
+          />
+          <textarea
+            className="rounded-lg border border-brand-100 px-3 py-2 text-sm" rows={2}
+            placeholder="راهنمای استفاده برای شهروند (اختیاری) — مثلاً «کد را هنگام خرید نشان دهید»"
+            value={form.redeem_instructions} onChange={(e) => update("redeem_instructions", e.target.value)}
+          />
+          {create.error && <p className="text-red-600 text-xs">{(create.error as Error).message}</p>}
+          <div className="flex gap-2 mt-1">
+            <Button type="button" variant="secondary" className="flex-1" onClick={onClose}>انصراف</Button>
+            <Button type="submit" className="flex-1" loading={create.isPending}>افزودن</Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function StorePartnersSubTab() {
+  const { data, isLoading } = useAdminStorePartners();
+  const update = useUpdateStorePartner();
+  const [showForm, setShowForm] = useState(false);
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <Button onClick={() => setShowForm(true)} className="!py-2.5 !text-xs">➕ افزودن فروشگاه همکار</Button>
+
+      {isLoading ? (
+        <CenterLoading />
+      ) : !data?.length ? (
+        <EmptyState icon="🏪" title="هنوز فروشگاهی ثبت نشده" subtitle="فروشگاه‌های همکار واقعی را از همین‌جا اضافه کنید." />
+      ) : (
+        data.map((p) => (
+          <Card key={p.uid} className="p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-ink-900">{p.name}</p>
+                <p className="text-[11px] text-ink-500 mt-0.5">{STORE_CATEGORY_LABELS[p.category]}</p>
+                {p.description && <p className="text-[10.5px] text-ink-400 mt-1">{p.description}</p>}
+              </div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${p.is_active ? "bg-brand-50 text-brand-700" : "bg-slate-100 text-ink-500"}`}>
+                {p.is_active ? "فعال" : "غیرفعال"}
+              </span>
+            </div>
+            <Button
+              variant={p.is_active ? "danger" : "secondary"} full className="mt-3 !py-2 !text-xs" loading={update.isPending}
+              onClick={() => update.mutate({ uid: p.uid, is_active: !p.is_active })}
+            >
+              {p.is_active ? "غیرفعال کردن" : "فعال کردن"}
+            </Button>
+          </Card>
+        ))
+      )}
+
+      {showForm && <PartnerFormModal onClose={() => setShowForm(false)} />}
+    </div>
+  );
+}
+
+function StoreRedemptionsSubTab() {
+  const [statusFilter, setStatusFilter] = useState("PENDING");
+  const { data, isLoading } = useAdminStoreRedemptions(statusFilter ? { status: statusFilter } : undefined);
+  const decide = useDecideStoreRedemption();
+  const [rejectTarget, setRejectTarget] = useState<AdminStoreRedemption | null>(null);
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1">
+        {[["", "همه"], ["PENDING", "در انتظار"], ["APPROVED", "تأییدشده"], ["FULFILLED", "استفاده‌شده"], ["REJECTED", "ردشده"]].map(([v, l]) => (
+          <button
+            key={v}
+            onClick={() => setStatusFilter(v)}
+            className={`text-[11px] px-3 py-1.5 rounded-lg whitespace-nowrap font-medium ${statusFilter === v ? "bg-brand-500 text-white" : "bg-white text-ink-600 border border-brand-100"}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <CenterLoading />
+      ) : !data?.length ? (
+        <EmptyState icon="🧾" title="درخواستی یافت نشد" />
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {data.map((r) => (
+            <Card key={r.uid} className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-bold text-ink-900">{r.user_name}</p>
+                  <p className="text-[11px] text-ink-500 mt-0.5" dir="ltr">{r.user_phone}</p>
+                  <p className="text-[10.5px] text-ink-400 mt-0.5">فروشگاه: {r.partner_name}</p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${STORE_REDEMPTION_STATUS_COLORS[r.status]}`}>
+                  {STORE_REDEMPTION_STATUS_LABELS[r.status]}
+                </span>
+              </div>
+              <p className="text-base font-extrabold text-brand-700 mt-2">{formatToman(r.amount)} تومان</p>
+              <p className="text-[10.5px] text-ink-400 mt-0.5">{toJalali(r.created_at)}</p>
+              {r.redemption_code && <p className="text-[10.5px] text-sky-700 mt-1" dir="ltr">کد: {r.redemption_code}</p>}
+              {r.note && <p className="text-[10.5px] text-ink-400 mt-1">یادداشت: {r.note}</p>}
+              {r.status === "PENDING" && (
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    className="flex-1 !py-2 !text-xs" loading={decide.isPending}
+                    onClick={() => decide.mutate({ uid: r.uid, action: "approve" })}
+                  >
+                    ✅ تأیید و صدور کد
+                  </Button>
+                  <Button variant="danger" className="flex-1 !py-2 !text-xs" onClick={() => setRejectTarget(r)}>
+                    ❌ رد
+                  </Button>
+                </div>
+              )}
+              {r.status === "APPROVED" && (
+                <Button full className="mt-3 !py-2 !text-xs" loading={decide.isPending} onClick={() => decide.mutate({ uid: r.uid, action: "mark_fulfilled" })}>
+                  📦 استفاده‌شد (پس از خرید حضوری)
+                </Button>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {rejectTarget && (
+        <ReasonModal
+          title={`رد درخواست خرید ${rejectTarget.user_name}`}
+          placeholder="دلیل رد را بنویسید..."
+          loading={decide.isPending}
+          error={(decide.error as Error | undefined)?.message}
+          onCancel={() => setRejectTarget(null)}
+          onSubmit={(note) => decide.mutate({ uid: rejectTarget.uid, action: "reject", note }, { onSuccess: () => setRejectTarget(null) })}
+        />
+      )}
+    </div>
+  );
+}
+
+const REQUEST_STATUS_OPTIONS: [string, string][] = [
+  ["", "همه"], ["SEARCHING_COLLECTOR", "در جستجوی جمع‌آور"], ["ACCEPTED", "پذیرفته‌شده"],
+  ["ON_THE_WAY", "در مسیر"], ["COLLECTED", "جمع‌آوری‌شده"], ["COMPLETED", "تکمیل‌شده"], ["CANCELLED", "لغوشده"],
+];
+
+function RequestsTab() {
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const params: Record<string, string> = {};
+  if (statusFilter) params.status = statusFilter;
+  if (search.trim().length > 1) params.search = search.trim();
+  const { data, isLoading } = useAdminRequests(params);
+
+  return (
+    <div className="flex flex-col gap-3 pb-6">
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-1">رصد و اصلاح درخواست‌های جمع‌آوری</p>
+        <p className="text-[11px] text-ink-500 leading-5">
+          آدرس/توضیحات یک درخواست را اصلاح کنید، در صورت نیاز لغوش کنید، یا اگر وزن‌کشیِ تکمیل‌شده اشتباه ثبت شده، آن را با ذکر دلیل اصلاح کنید — هر اصلاح با دلیل، در تاریخچهٔ درخواست ثبت می‌شود و مبلغ کیف‌پول به‌صورت خودکار هم‌سو می‌شود.
+        </p>
+      </Card>
+
+      <input
+        className="w-full rounded-xl border border-brand-100 px-3 py-2.5 text-sm"
+        placeholder="جستجو بر اساس کد درخواست یا نام/موبایل شهروند..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
+      <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1">
+        {REQUEST_STATUS_OPTIONS.map(([v, l]) => (
+          <button
+            key={v}
+            onClick={() => setStatusFilter(v)}
+            className={`text-[11px] px-3 py-1.5 rounded-lg whitespace-nowrap font-medium ${statusFilter === v ? "bg-brand-500 text-white" : "bg-white text-ink-600 border border-brand-100"}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <CenterLoading />
+      ) : !data?.length ? (
+        <EmptyState icon="📋" title="درخواستی یافت نشد" />
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {data.slice(0, 30).map((r) => (
+            <RequestRow key={r.uid} request={r} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RequestRow({ request }: { request: CollectionRequest }) {
+  const [panel, setPanel] = useState<"none" | "edit" | "cancel" | "override">("none");
+  const editMut = useAdminEditRequest();
+  const cancelMut = useAdminCancelRequest();
+  const overrideMut = useAdminOverrideWeighing();
+
+  const [addr, setAddr] = useState(request.address_text_snapshot);
+  const [desc, setDesc] = useState(request.description);
+  const [editReason, setEditReason] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
+  const [weight, setWeight] = useState(request.weighing?.weight_kg || "");
+  const [overrideReason, setOverrideReason] = useState("");
+
+  const isTerminal = request.status === "COMPLETED" || request.status === "CANCELLED";
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-ink-900">{request.code}</p>
+          <p className="text-[11px] text-ink-500 mt-0.5 truncate">{request.address_text_snapshot}</p>
+        </div>
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-ink-600 shrink-0">{request.status_display}</span>
+      </div>
+      {request.weighing && (
+        <p className="text-[10.5px] text-ink-500 mt-1.5">
+          وزن‌کشی: {request.weighing.weight_kg} کیلو — {formatToman(request.weighing.total_value)} تومان
+        </p>
+      )}
+
+      <div className="flex gap-2 mt-3 flex-wrap">
+        <Button variant="secondary" className="!py-1.5 !px-3 !text-[11px]" onClick={() => setPanel(panel === "edit" ? "none" : "edit")}>
+          ✏️ اصلاح آدرس/توضیح
+        </Button>
+        {!isTerminal && (
+          <Button variant="danger" className="!py-1.5 !px-3 !text-[11px]" onClick={() => setPanel(panel === "cancel" ? "none" : "cancel")}>
+            ❌ لغو درخواست
+          </Button>
+        )}
+        {request.weighing && (
+          <Button variant="secondary" className="!py-1.5 !px-3 !text-[11px]" onClick={() => setPanel(panel === "override" ? "none" : "override")}>
+            ⚖️ اصلاح وزن‌کشی
+          </Button>
+        )}
+      </div>
+
+      {panel === "edit" && (
+        <div className="mt-3 pt-3 border-t border-brand-50 flex flex-col gap-2">
+          <textarea className="rounded-lg border border-brand-100 px-3 py-2 text-xs" rows={2} placeholder="آدرس" value={addr} onChange={(e) => setAddr(e.target.value)} />
+          <textarea className="rounded-lg border border-brand-100 px-3 py-2 text-xs" rows={2} placeholder="توضیحات" value={desc} onChange={(e) => setDesc(e.target.value)} />
+          <input className="rounded-lg border border-brand-100 px-3 py-2 text-xs" placeholder="دلیل اصلاح (الزامی)" value={editReason} onChange={(e) => setEditReason(e.target.value)} />
+          {editMut.error && <p className="text-red-600 text-[11px]">{(editMut.error as Error).message}</p>}
+          <div className="flex gap-2">
+            <Button
+              className="flex-1 !py-2 !text-xs" loading={editMut.isPending} disabled={!editReason.trim()}
+              onClick={() => editMut.mutate(
+                { uid: request.uid, reason: editReason, address_text_snapshot: addr, description: desc },
+                { onSuccess: () => setPanel("none") },
+              )}
+            >
+              ثبت اصلاح
+            </Button>
+            <Button variant="secondary" className="flex-1 !py-2 !text-xs" onClick={() => setPanel("none")}>انصراف</Button>
+          </div>
+        </div>
+      )}
+
+      {panel === "cancel" && (
+        <div className="mt-3 pt-3 border-t border-brand-50 flex flex-col gap-2">
+          <input className="rounded-lg border border-brand-100 px-3 py-2 text-xs" placeholder="دلیل لغو (الزامی)" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} />
+          {cancelMut.error && <p className="text-red-600 text-[11px]">{(cancelMut.error as Error).message}</p>}
+          <div className="flex gap-2">
+            <Button
+              variant="danger" className="flex-1 !py-2 !text-xs" loading={cancelMut.isPending} disabled={!cancelReason.trim()}
+              onClick={() => cancelMut.mutate({ uid: request.uid, reason: cancelReason }, { onSuccess: () => setPanel("none") })}
+            >
+              تأیید لغو
+            </Button>
+            <Button variant="secondary" className="flex-1 !py-2 !text-xs" onClick={() => setPanel("none")}>انصراف</Button>
+          </div>
+        </div>
+      )}
+
+      {panel === "override" && request.weighing && (
+        <div className="mt-3 pt-3 border-t border-brand-50 flex flex-col gap-2">
+          <p className="text-[10.5px] text-ink-500">وزن فعلی: {request.weighing.weight_kg} کیلو — {formatToman(request.weighing.total_value)} تومان</p>
+          <input className="rounded-lg border border-brand-100 px-3 py-2 text-xs" inputMode="decimal" placeholder="وزن اصلاح‌شده (کیلوگرم)" value={weight} onChange={(e) => setWeight(e.target.value)} />
+          <input className="rounded-lg border border-brand-100 px-3 py-2 text-xs" placeholder="دلیل اصلاح (الزامی)" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} />
+          <p className="text-[10px] text-ink-400">مبلغ تسویه به‌صورت خودکار بر اساس قیمت زمان تحویل بازمحاسبه و تفاوت آن با کیف‌پول شهروند تسویه می‌شود.</p>
+          {overrideMut.error && <p className="text-red-600 text-[11px]">{(overrideMut.error as Error).message}</p>}
+          <div className="flex gap-2">
+            <Button
+              className="flex-1 !py-2 !text-xs" loading={overrideMut.isPending} disabled={!overrideReason.trim() || !weight}
+              onClick={() => overrideMut.mutate(
+                { uid: request.uid, weight_kg: Number(weight), reason: overrideReason },
+                { onSuccess: () => setPanel("none") },
+              )}
+            >
+              ثبت اصلاح وزن‌کشی
+            </Button>
+            <Button variant="secondary" className="flex-1 !py-2 !text-xs" onClick={() => setPanel("none")}>انصراف</Button>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
 
 function ChartsTab() {
   const { data, isLoading } = useAdminCharts(30);

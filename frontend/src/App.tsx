@@ -1,6 +1,7 @@
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useAuthStore } from "./store/auth";
 import { useMe } from "./api/queries";
+import { getAvailableViews, viewPath } from "./lib/roles";
 import BottomNav from "./components/BottomNav";
 import { CenterLoading } from "./components/ui";
 
@@ -26,6 +27,7 @@ import BusinessDashboard from "./pages/BusinessDashboard";
 import Calculator from "./pages/Calculator";
 import CameraScan from "./pages/CameraScan";
 import Missions from "./pages/Missions";
+import Store from "./pages/Store";
 import GreenImpact from "./pages/GreenImpact";
 import ImpactProjects from "./pages/ImpactProjects";
 import ImpactProjectDetail from "./pages/ImpactProjectDetail";
@@ -34,6 +36,34 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const accessToken = useAuthStore((s) => s.accessToken);
   const location = useLocation();
   if (!accessToken) return <Navigate to="/login" replace state={{ from: location }} />;
+  return <>{children}</>;
+}
+
+/**
+ * Role gate for the dedicated collector/station-operator/admin dashboards:
+ * an account without that role is bounced straight to its own default view
+ * (right from login, no flash of someone else's operational data) instead of
+ * being able to reach these URLs by typing them directly. General citizen
+ * pages (wallet, requests, missions, etc.) stay open to every authenticated
+ * account, matching the app's existing "everyone also has a CITIZEN view"
+ * design (see lib/roles.ts) — only these role-specific dashboards are gated.
+ */
+function RequireRole({ view, children }: { view: string; children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  const views = getAvailableViews(user);
+  if (!views.some((v) => v.key === view)) {
+    return <Navigate to={viewPath(views[0]?.key ?? "CITIZEN")} replace />;
+  }
+  return <>{children}</>;
+}
+
+function RequireBusinessRole({ children }: { children: React.ReactNode }) {
+  const { kind } = useParams();
+  const user = useAuthStore((s) => s.user);
+  const views = getAvailableViews(user);
+  if (!kind || !views.some((v) => v.key === kind)) {
+    return <Navigate to={viewPath(views[0]?.key ?? "CITIZEN")} replace />;
+  }
   return <>{children}</>;
 }
 
@@ -66,6 +96,7 @@ export default function App() {
       <Route path="/stations" element={<RequireAuth><AppLayout><Stations /></AppLayout></RequireAuth>} />
       <Route path="/materials" element={<RequireAuth><AppLayout><Materials /></AppLayout></RequireAuth>} />
       <Route path="/marketplace" element={<RequireAuth><AppLayout><Marketplace /></AppLayout></RequireAuth>} />
+      <Route path="/store" element={<RequireAuth><AppLayout><Store /></AppLayout></RequireAuth>} />
       <Route path="/notifications" element={<RequireAuth><AppLayout><Notifications /></AppLayout></RequireAuth>} />
       <Route path="/leaderboard" element={<RequireAuth><AppLayout><Leaderboard /></AppLayout></RequireAuth>} />
       <Route path="/calculator" element={<RequireAuth><AppLayout><Calculator /></AppLayout></RequireAuth>} />
@@ -77,10 +108,10 @@ export default function App() {
 
       <Route path="/addresses" element={<RequireAuth><AppLayout><AddressBook /></AppLayout></RequireAuth>} />
       <Route path="/collector/register" element={<RequireAuth><AppLayout><CollectorRegister /></AppLayout></RequireAuth>} />
-      <Route path="/collector" element={<RequireAuth><AppLayout><CollectorHome /></AppLayout></RequireAuth>} />
-      <Route path="/station-operator" element={<RequireAuth><AppLayout><StationOperator /></AppLayout></RequireAuth>} />
-      <Route path="/business/:kind" element={<RequireAuth><AppLayout><BusinessDashboard /></AppLayout></RequireAuth>} />
-      <Route path="/admin" element={<RequireAuth><AppLayout><AdminDashboard /></AppLayout></RequireAuth>} />
+      <Route path="/collector" element={<RequireAuth><RequireRole view="COLLECTOR"><AppLayout><CollectorHome /></AppLayout></RequireRole></RequireAuth>} />
+      <Route path="/station-operator" element={<RequireAuth><RequireRole view="STATION_OPERATOR"><AppLayout><StationOperator /></AppLayout></RequireRole></RequireAuth>} />
+      <Route path="/business/:kind" element={<RequireAuth><RequireBusinessRole><AppLayout><BusinessDashboard /></AppLayout></RequireBusinessRole></RequireAuth>} />
+      <Route path="/admin" element={<RequireAuth><RequireRole view="ADMIN"><AppLayout><AdminDashboard /></AppLayout></RequireRole></RequireAuth>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -33,6 +33,10 @@ class User(AbstractUser, UUIDModel):
         "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="referrals"
     )
     is_suspended = models.BooleanField(default=False)
+    city = models.CharField(
+        max_length=64, default="یاسوج",
+        help_text="شهر انتخابی کاربر هنگام ثبت‌نام — برای نمایش هویت محلی صفحه اصلی (نام باید با locations.City.name یکی باشد)",
+    )
     customer_type = models.CharField(
         max_length=16,
         choices=[("INDIVIDUAL", "شخصی"), ("ORGANIZATION", "سازمانی / اداره")],

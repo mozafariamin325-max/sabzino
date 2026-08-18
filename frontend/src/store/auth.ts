@@ -15,6 +15,7 @@ export interface SabzinoUser {
   phone_number: string | null;
   avatar: string | null;
   referral_code: string;
+  city?: string;
   roles: { role: Role; is_primary: boolean }[];
   is_staff?: boolean;
 }

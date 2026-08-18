@@ -1,0 +1,7 @@
+{
+  "app": "sabzino-frontend",
+  "platform": "react",
+  "react": {
+    "sourceMap": false
+  }
+}

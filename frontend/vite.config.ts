@@ -50,4 +50,10 @@ export default defineConfig({
     host: true,
     port: 5173,
   },
+  // Liara's "react" platform (see ../frontend/liara.json) requires Vite's
+  // build output to be named "build" instead of Vite's default "dist" —
+  // purely a deploy-time convention, doesn't affect local dev.
+  build: {
+    outDir: 'build',
+  },
 })

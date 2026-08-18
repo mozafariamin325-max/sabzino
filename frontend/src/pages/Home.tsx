@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useAuthStore } from "../store/auth";
 import {
-  useActiveIdentityCity, useGreenPoints, useMyGreenImpact, useMyRequests, useNotifications, usePricing, useWallet,
+  useIdentityCities, useGreenPoints, useMyGreenImpact, useMyRequests, useNotifications, usePricing, useWallet,
 } from "../api/queries";
 import { Card, CenterLoading, DemoBadge, StatusPill } from "../components/ui";
 import { formatKg, formatToman, toJalali } from "../lib/format";
@@ -13,8 +13,8 @@ const SERVICES = [
   { to: "/requests/new", label: "درخواست جمع‌آوری", icon: "🚚", bg: "bg-brand-50" },
   { to: "/scan", label: "تشخیص با دوربین", icon: "📷", bg: "bg-rose-50" },
   { to: "/stations", label: "مراکز بازیافت نزدیک", icon: "📍", bg: "bg-amber-50" },
-  { to: "/marketplace", label: "فروشگاه سبزینو", icon: "🛍️", bg: "bg-violet-50" },
-  { to: "/green-impact/projects", label: "پروژه‌های اثر سبز", icon: "🌍", bg: "bg-lime-50" },
+  { to: "/store", label: "فروشگاه سبزینو", icon: "🛍️", bg: "bg-violet-50" },
+  { to: "/marketplace", label: "بازار عمده ضایعات", icon: "📦", bg: "bg-orange-50" },
   { to: "/missions", label: "ماموریت‌های سبز", icon: "🎯", bg: "bg-emerald-50" },
   { to: "/materials", label: "دسته‌بندی و قیمت‌ها", icon: "♻️", bg: "bg-sky-50" },
 ];
@@ -26,7 +26,8 @@ export default function Home() {
   const { data: requests } = useMyRequests();
   const { data: notifications } = useNotifications();
   const { data: prices } = usePricing();
-  const { data: city } = useActiveIdentityCity();
+  const { data: identityCities } = useIdentityCities();
+  const city = (identityCities || []).find((c) => c.name === user?.city) || (identityCities || [])[0] || null;
   const { data: greenImpact } = useMyGreenImpact();
   const unread = (notifications || []).filter((n: { is_read: boolean }) => !n.is_read).length;
 
@@ -120,30 +121,35 @@ export default function Home() {
       </div>
 
       <div className="px-4 mt-3">
-        <Link to="/green-impact" className="block rounded-3xl bg-white p-4 shadow-[0_1px_2px_rgba(15,122,61,0.06),0_8px_24px_-16px_rgba(15,122,61,0.25)] relative overflow-hidden">
-          <div className="flex items-center gap-3">
-            <span className="w-12 h-12 rounded-2xl bg-gradient-to-bl from-brand-400 to-brand-600 flex items-center justify-center text-2xl text-white flex-shrink-0">
+        <Link
+          to="/green-impact"
+          className="block rounded-3xl p-5 text-white relative overflow-hidden shadow-md active:scale-[0.99] transition"
+          style={{ background: "linear-gradient(120deg, #7c2d12 0%, #b45309 45%, #ca8a04 100%)" }}
+        >
+          <span className="absolute -left-8 -top-10 w-32 h-32 rounded-full bg-white/10" aria-hidden="true" />
+          <span className="absolute left-16 -bottom-14 w-28 h-28 rounded-full bg-white/10" aria-hidden="true" />
+          <div className="relative z-10 flex items-center gap-3">
+            <span className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-2xl flex-shrink-0">
               🌱
             </span>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-bold text-ink-900">اثر سبز من</p>
-                <span className="text-[11px] text-brand-600 font-medium">مشاهده ‹</span>
-              </div>
-              <p className="text-[11px] text-ink-500 mt-0.5">هر تحویل، یک اثر — زباله من، آینده یک نفر</p>
+              <p className="text-base font-extrabold">اثر سبز و مشارکت اجتماعی</p>
+              <p className="text-[11px] text-white/85 mt-0.5 leading-relaxed">
+                بخشی از ارزش پسماندت را به کارهای خیر، محیط‌زیست یا اشتغال سبز اختصاص بده — کاملاً اختیاری و شفاف
+              </p>
             </div>
           </div>
-          {greenImpact && (
-            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-brand-50">
-              <div className="flex items-center gap-1.5">
-                <span className="text-base">{greenImpact.tier.icon}</span>
-                <span className="text-[11px] text-ink-600 font-medium">{greenImpact.tier.name}</span>
+          <div className="relative z-10 flex items-center justify-between mt-4">
+            {greenImpact ? (
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="flex items-center gap-1"><span>{greenImpact.tier.icon}</span>{greenImpact.tier.name}</span>
+                <span className="text-white/85">مشارکت من: <b>{formatToman(greenImpact.total_contributed)} ت</b></span>
               </div>
-              <div className="text-[11px] text-ink-500">
-                مشارکت من: <span className="font-bold text-brand-600">{formatToman(greenImpact.total_contributed)} تومان</span>
-              </div>
-            </div>
-          )}
+            ) : <span />}
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-white text-amber-800 px-3 py-1.5 rounded-lg">
+              مشاهده و مشارکت ‹
+            </span>
+          </div>
         </Link>
       </div>
 
@@ -200,9 +206,6 @@ export default function Home() {
                 <p className="text-sm font-extrabold text-brand-600 mt-1.5">
                   {formatToman(p.price_per_unit)} <span className="text-[10px] font-normal text-ink-500">ت/{p.unit_display}</span>
                 </p>
-                {p.market_price && (
-                  <p className="text-[10px] text-ink-400 mt-0.5 line-through">بازار: {formatToman(p.market_price)} ت</p>
-                )}
                 <p className="text-[9.5px] text-ink-400 mt-1.5">{new Date(p.effective_from).toLocaleDateString("fa-IR")}</p>
               </Card>
             ))}
@@ -259,13 +262,15 @@ export default function Home() {
       </div>
 
       <div className="px-4 mt-6">
-        <Card className="p-4 bg-gradient-to-l from-brand-50 to-white flex items-center justify-between">
-          <div>
-            <p className="text-sm font-bold text-ink-900">با امتیازها تخفیف بگیر!</p>
-            <p className="text-xs text-ink-500 mt-0.5">از فروشگاه سبزینو خرید کن و تخفیف بگیر</p>
-          </div>
-          <span className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-2xl shadow-sm">🎁</span>
-        </Card>
+        <Link to="/store">
+          <Card className="p-4 bg-gradient-to-l from-brand-50 to-white flex items-center justify-between">
+            <div>
+              <p className="text-sm font-bold text-ink-900">با موجودی کیف‌پولت خرید کن!</p>
+              <p className="text-xs text-ink-500 mt-0.5">فروشگاه سبزینو — از فروشگاه‌های همکار با موجودی کیف‌پولت خرید کن</p>
+            </div>
+            <span className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-2xl shadow-sm">🎁</span>
+          </Card>
+        </Link>
       </div>
 
       <div className="px-4 mt-4">

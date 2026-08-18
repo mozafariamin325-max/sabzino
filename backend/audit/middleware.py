@@ -1,6 +1,7 @@
 SENSITIVE_PREFIXES = (
     "/api/v1/auth/login", "/api/v1/auth/register",
-    "/api/v1/collectors/admin", "/api/v1/wallet/withdrawals",
+    "/api/v1/collectors/admin", "/api/v1/wallet/withdrawals", "/api/v1/wallet/admin",
+    "/api/v1/collections/admin",
     "/api/v1/pricing", "/api/v1/orders", "/api/v1/marketplace/recycling-centers",
     "/api/v1/marketplace/factories", "/api/v1/marketplace/wholesalers",
 )
