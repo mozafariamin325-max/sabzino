@@ -3,6 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts";
+import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { api } from "../api/client";
 import { useAuthStore } from "../store/auth";
 import {
@@ -13,6 +16,7 @@ import {
   useAdminWithdrawals, useDecideWithdrawal,
   useAdminRequests, useAdminEditRequest, useAdminCancelRequest, useAdminOverrideWeighing,
   useAdminStorePartners, useCreateStorePartner, useUpdateStorePartner, useAdminStoreRedemptions, useDecideStoreRedemption,
+  useStations, useNearbyCollectorsMap,
 } from "../api/queries";
 import { Button, Card, CenterLoading, DemoBadge, EmptyState, TopBar } from "../components/ui";
 import { formatKg, formatNumber, formatToman, toJalali } from "../lib/format";
@@ -34,7 +38,7 @@ function jalaliDay(iso: string) {
 
 type Tab =
   | "overview" | "verification" | "charts" | "prices" | "missions" | "cities" | "b2b" | "impact" | "tools"
-  | "drivers" | "withdrawals" | "requests" | "store";
+  | "drivers" | "withdrawals" | "requests" | "store" | "map";
 
 export default function AdminDashboard() {
   const user = useAuthStore((s) => s.user);
@@ -134,6 +138,7 @@ export default function AdminDashboard() {
               ["overview", "📊 نمای کلی"],
               ["verification", `✅ تأیید ثبت‌نام‌ها${data.pending_verifications ? ` (${data.pending_verifications})` : ""}`],
               ["requests", "📋 درخواست‌های جمع‌آوری"],
+              ["map", "🗺️ نقشه زنده"],
               ["drivers", "🚚 حساب رانندگان"],
               ["withdrawals", "💳 برداشت وجه"],
               ["store", "🛍️ فروشگاه سبزینو"],
@@ -191,6 +196,7 @@ export default function AdminDashboard() {
 
         {isStaff && tab === "verification" && <VerificationTab />}
         {isStaff && tab === "requests" && <RequestsTab />}
+        {isStaff && tab === "map" && <LiveMapTab />}
         {isStaff && tab === "drivers" && <DriversTab />}
         {isStaff && tab === "withdrawals" && <WithdrawalsTab />}
         {isStaff && tab === "store" && <StoreTab />}
@@ -1238,6 +1244,125 @@ const REQUEST_STATUS_OPTIONS: [string, string][] = [
   ["", "همه"], ["SEARCHING_COLLECTOR", "در جستجوی جمع‌آور"], ["ACCEPTED", "پذیرفته‌شده"],
   ["ON_THE_WAY", "در مسیر"], ["COLLECTED", "جمع‌آوری‌شده"], ["COMPLETED", "تکمیل‌شده"], ["CANCELLED", "لغوشده"],
 ];
+
+const YASUJ_CENTER: [number, number] = [30.6683, 51.5877];
+
+function pinIcon(color: string, emoji: string) {
+  return new L.DivIcon({
+    html: `<div style="background:${color};width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3)"><span style="transform:rotate(45deg);font-size:13px">${emoji}</span></div>`,
+    className: "",
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+  });
+}
+
+const stationMapIcon = pinIcon("#16a34a", "♻️");
+const collectorMapIcon = pinIcon("#2563eb", "🚚");
+const pendingRequestMapIcon = pinIcon("#dc2626", "📦");
+
+/**
+ * فاز ۱۰: نقشه زنده‌ی ادمین — همان دیتاهایی که در نقشه‌ی شهروند (Stations.tsx)
+ * هست (ایستگاه‌ها + جمع‌آورهای آنلاین) به‌علاوه درخواست‌های در انتظار جمع‌آور،
+ * تا ادمین یک نمای عملیاتی لحظه‌ای از کل شهر داشته باشد.
+ */
+function LiveMapTab() {
+  const { data: stations, isLoading: stationsLoading } = useStations();
+  const { data: collectors, isLoading: collectorsLoading } = useNearbyCollectorsMap();
+  const { data: pendingRequests, isLoading: requestsLoading } = useAdminRequests({ status: "SEARCHING_COLLECTOR" });
+
+  const isLoading = stationsLoading || collectorsLoading || requestsLoading;
+  const onlineCount = (collectors || []).filter((c) => c.lat && c.lng).length;
+  const pendingCount = (pendingRequests || []).filter((r) => r.lat && r.lng).length;
+
+  return (
+    <div className="flex flex-col gap-3 pb-6">
+      <Card className="p-4">
+        <p className="text-sm font-bold text-ink-900 mb-1">نقشه زنده عملیات</p>
+        <p className="text-[11px] text-ink-500 leading-5">
+          موقعیت لحظه‌ای جمع‌آورهای آنلاین، مراکز بازیافت و درخواست‌های در انتظار پذیرش — این نقشه هر چند ثانیه یک‌بار به‌روزرسانی می‌شود.
+        </p>
+      </Card>
+
+      <div className="flex items-center gap-3">
+        <Card className="p-3 flex-1 text-center">
+          <p className="text-lg font-bold text-blue-600">{isLoading ? "—" : onlineCount}</p>
+          <p className="text-[10.5px] text-ink-500">جمع‌آور آنلاین</p>
+        </Card>
+        <Card className="p-3 flex-1 text-center">
+          <p className="text-lg font-bold text-red-600">{isLoading ? "—" : pendingCount}</p>
+          <p className="text-[10.5px] text-ink-500">درخواست در انتظار</p>
+        </Card>
+        <Card className="p-3 flex-1 text-center">
+          <p className="text-lg font-bold text-brand-600">{isLoading ? "—" : (stations || []).length}</p>
+          <p className="text-[10.5px] text-ink-500">مرکز بازیافت</p>
+        </Card>
+      </div>
+
+      <Card className="overflow-hidden h-[420px]">
+        <MapContainer center={YASUJ_CENTER} zoom={13} style={{ height: "100%", width: "100%" }} scrollWheelZoom>
+          <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          {(stations || []).map(
+            (s) =>
+              s.lat &&
+              s.lng && (
+                <Marker key={`st-${s.uid}`} position={[Number(s.lat), Number(s.lng)]} icon={stationMapIcon}>
+                  <Popup>
+                    <b>{s.name}</b>
+                    <br />
+                    {s.address}
+                  </Popup>
+                </Marker>
+              )
+          )}
+          {(collectors || []).map((c) => {
+            const lat = Number(c.lat);
+            const lng = Number(c.lng);
+            if (!c.lat || !c.lng || Number.isNaN(lat) || Number.isNaN(lng)) return null;
+            return (
+              <Marker key={`col-${c.id}`} position={[lat, lng]} icon={collectorMapIcon}>
+                <Popup>
+                  <b>{c.name}</b>
+                  <br />⭐ {c.rating_avg}
+                </Popup>
+              </Marker>
+            );
+          })}
+          {(pendingRequests || []).map((r) => {
+            const lat = Number(r.lat);
+            const lng = Number(r.lng);
+            if (!r.lat || !r.lng || Number.isNaN(lat) || Number.isNaN(lng)) return null;
+            return (
+              <Marker key={`req-${r.uid}`} position={[lat, lng]} icon={pendingRequestMapIcon}>
+                <Popup>
+                  <b>#{r.code}</b>
+                  <br />
+                  {r.address_text_snapshot}
+                  <br />
+                  {formatToman(r.estimated_value)} ت (تخمینی)
+                </Popup>
+              </Marker>
+            );
+          })}
+        </MapContainer>
+      </Card>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="flex items-center gap-1 text-[11px] text-ink-500">
+          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: "#16a34a" }} />
+          مراکز بازیافت
+        </span>
+        <span className="flex items-center gap-1 text-[11px] text-ink-500">
+          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: "#2563eb" }} />
+          جمع‌آورهای آنلاین
+        </span>
+        <span className="flex items-center gap-1 text-[11px] text-ink-500">
+          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: "#dc2626" }} />
+          درخواست در انتظار جمع‌آور
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function RequestsTab() {
   const [statusFilter, setStatusFilter] = useState("");

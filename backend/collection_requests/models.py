@@ -73,6 +73,24 @@ class CollectionAssignment(TimeStampedModel):
         return f"{self.request.code} -> {self.collector}"
 
 
+class RequestDismissal(TimeStampedModel):
+    """
+    A collector explicitly hid this request from their own "nearby" list
+    (فاز ۱۰: دکمه رد کردن) — per-collector only, so the request stays fully
+    visible/claimable for every other online collector. Distinct from an
+    accepted/cancelled request: dismissal never touches CollectionRequest.status.
+    """
+
+    request = models.ForeignKey(CollectionRequest, on_delete=models.CASCADE, related_name="dismissals")
+    collector = models.ForeignKey("collectors.CollectorProfile", on_delete=models.CASCADE, related_name="dismissed_requests")
+
+    class Meta:
+        unique_together = ("request", "collector")
+
+    def __str__(self):
+        return f"{self.collector} dismissed {self.request.code}"
+
+
 class CollectionStatusLog(TimeStampedModel):
     """Every status change is logged (spec section 13) for tracking + audit."""
 

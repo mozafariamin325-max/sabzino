@@ -7,7 +7,7 @@ from .models import CollectionRequest, RequestStatus, RecurringSchedule
 from .serializers import CollectionRequestSerializer, CreateCollectionRequestSerializer, WeighInSerializer, RecurringScheduleSerializer
 from .services import (
     log_status, find_nearby_open_requests, accept_request, complete_weighing,
-    admin_edit_request, admin_override_weighing,
+    admin_edit_request, admin_override_weighing, dismiss_request,
 )
 
 
@@ -85,6 +85,21 @@ class AcceptRequestView(views.APIView):
         except ValueError as e:
             return Response({"success": False, "message": str(e)}, status=400)
         return Response({"success": True, "message": "درخواست پذیرفته شد.", "request": CollectionRequestSerializer(req_obj).data})
+
+
+class DismissRequestView(views.APIView):
+    """
+    فاز ۱۰: دکمه «رد کردن» برای جمع‌آور — فقط از لیست «نزدیک من» خودش پنهان
+    می‌شود؛ برای بقیه‌ی جمع‌آورهای آنلاین همچنان قابل مشاهده و پذیرش است.
+    """
+
+    def post(self, request, uid):
+        profile = getattr(request.user, "collector_profile", None)
+        if not profile:
+            return Response({"success": False, "message": "پروفایل جمع‌آور یافت نشد."}, status=404)
+        req_obj = generics.get_object_or_404(CollectionRequest, uid=uid)
+        dismiss_request(profile, req_obj)
+        return Response({"success": True})
 
 
 class UpdateAssignmentStatusView(views.APIView):

@@ -79,6 +79,28 @@ class NearbyCollectorsView(views.APIView):
         return Response({"success": True, "collectors": data})
 
 
+class CollectorTodayStatsView(views.APIView):
+    """
+    فاز ۱۰: «امروز» جمع‌آور — تعداد مأموریت‌های پذیرفته/تکمیل‌شده‌ی امروز.
+    عمداً مبلغ/درآمد ندارد؛ چون فعلاً مدل پرداخت جداگانه به جمع‌آور ساخته
+    نشده (کل ارزش پسماند طبق طراحی فعلی به کیف‌پول شهروند واریز می‌شود).
+    """
+
+    def get(self, request):
+        from django.utils import timezone
+        from collection_requests.models import CollectionAssignment, CollectionStatusLog, RequestStatus
+
+        profile = getattr(request.user, "collector_profile", None)
+        if not profile:
+            return Response({"success": False, "message": "پروفایل جمع‌آور یافت نشد."}, status=404)
+        today = timezone.localdate()
+        accepted_today = CollectionAssignment.objects.filter(collector=profile, accepted_at__date=today).count()
+        completed_today = CollectionStatusLog.objects.filter(
+            status=RequestStatus.COMPLETED, request__assignment__collector=profile, created_at__date=today
+        ).count()
+        return Response({"success": True, "accepted_today": accepted_today, "completed_today": completed_today})
+
+
 class ToggleOnlineView(views.APIView):
     def post(self, request):
         profile = getattr(request.user, "collector_profile", None)

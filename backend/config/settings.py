@@ -176,3 +176,9 @@ LOGGING = {
 # ---- SABZINO business config (Admin-tunable defaults; overridable via PlatformSetting model) ----
 SABZINO_DEFAULT_COMMISSION_PERCENT = config("SABZINO_DEFAULT_COMMISSION_PERCENT", default=10, cast=float)
 SABZINO_DEFAULT_POINTS_PER_KG = config("SABZINO_DEFAULT_POINTS_PER_KG", default=2, cast=float)
+
+# ---- فاز ۱۱: پیامک واقعی (sms.ir) — فقط برای اعلان‌های متنی، بدون تغییر در ورود/OTP ----
+# خالی‌بودن این سه مقدار یعنی «پیامک هنوز پیکربندی نشده» — core.sms_service در این
+# حالت فقط لاگ می‌کند و هیچ خطایی روی جریان اصلی (تکمیل درخواست/کیف‌پول) نمی‌اندازد.
+SMS_IR_API_KEY = config("SMS_IR_API_KEY", default="")
+SMS_IR_LINE_NUMBER = config("SMS_IR_LINE_NUMBER", default="")

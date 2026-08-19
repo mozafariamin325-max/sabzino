@@ -52,14 +52,20 @@ class CollectionRequestSerializer(serializers.ModelSerializer):
     status_logs = StatusLogSerializer(many=True, read_only=True)
     assignment = AssignmentSerializer(read_only=True)
     weighing = WeighingRecordSerializer(read_only=True)
+    # فاز ۱۰: فقط وقتی پر می‌شود که سرویس فاصله را روی خود شیء نشانده باشد
+    # (find_nearby_open_requests) — در بقیه‌ی جاها null برمی‌گردد، بی‌ضرر است.
+    distance_km = serializers.SerializerMethodField()
 
     class Meta:
         model = CollectionRequest
         fields = (
             "uid", "code", "materials", "items", "amount_range", "amount_range_display", "address_text_snapshot",
             "lat", "lng", "preferred_time", "green_intent", "description", "photo", "estimated_value",
-            "status", "status_display", "status_logs", "assignment", "weighing", "created_at",
+            "status", "status_display", "status_logs", "assignment", "weighing", "created_at", "distance_km",
         )
+
+    def get_distance_km(self, obj):
+        return getattr(obj, "_distance_km", None)
 
 
 class CreateCollectionRequestSerializer(serializers.ModelSerializer):
@@ -138,9 +144,10 @@ class CreateCollectionRequestSerializer(serializers.ModelSerializer):
             request_obj.estimated_value = estimate_value(materials, request_obj.amount_range)
         request_obj.save(update_fields=["estimated_value"])
 
-        from .services import log_status
+        from .services import log_status, dispatch_new_request
         from .models import RequestStatus
         log_status(request_obj, RequestStatus.SEARCHING_COLLECTOR, note="در انتظار پذیرش جمع‌آور", changed_by=self.context["request"].user)
+        dispatch_new_request(request_obj)
         return request_obj
 
 

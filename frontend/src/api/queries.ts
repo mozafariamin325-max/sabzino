@@ -728,7 +728,25 @@ export function useAcceptRequest() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["nearby-requests"] });
       qc.invalidateQueries({ queryKey: ["my-assignments"] });
+      qc.invalidateQueries({ queryKey: ["collector-today-stats"] });
     },
+  });
+}
+
+export function useDismissRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (uid: string) => (await api.post(`/collections/${uid}/dismiss/`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["nearby-requests"] }),
+  });
+}
+
+export function useCollectorTodayStats() {
+  return useQuery({
+    queryKey: ["collector-today-stats"],
+    queryFn: async () =>
+      (await api.get<{ accepted_today: number; completed_today: number }>("/collectors/me/today-stats/")).data,
+    refetchInterval: 30_000,
   });
 }
 

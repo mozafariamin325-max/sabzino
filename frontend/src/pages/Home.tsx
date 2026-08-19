@@ -10,7 +10,6 @@ import { curatedHomePrices } from "../lib/homePrices";
 import brandmark from "../assets/brand/brandmark-256.png";
 
 const SERVICES = [
-  { to: "/requests/new", label: "درخواست جمع‌آوری", icon: "🚚", bg: "bg-brand-50" },
   { to: "/scan", label: "تشخیص با دوربین", icon: "📷", bg: "bg-rose-50" },
   { to: "/stations", label: "مراکز بازیافت نزدیک", icon: "📍", bg: "bg-amber-50" },
   { to: "/store", label: "فروشگاه سبزینو", icon: "🛍️", bg: "bg-violet-50" },
@@ -76,7 +75,33 @@ export default function Home() {
         </div>
       )}
 
-      <div className="px-4 mt-2">
+      {/* CTA غالب صفحه اصلی — «زباله‌هامو می‌خوام بفروشم». عمداً اولین و
+          پررنگ‌ترین عنصر قابل‌کلیک بعد از هدر است، نه یکی از هفت آیتم گرید
+          خدمات؛ بقیه خدمات پایین‌تر و کم‌رنگ‌تر می‌آیند. */}
+      <div className="px-4 mt-3">
+        <Link
+          to="/requests/new"
+          className="block rounded-3xl p-5 text-white relative overflow-hidden shadow-lg active:scale-[0.98] transition animate-fade-up"
+          style={{ background: "linear-gradient(135deg, #0f7a3d 0%, #16a34a 55%, #22c55e 100%)" }}
+        >
+          <span className="absolute -left-10 -top-14 w-40 h-40 rounded-full bg-white/10" aria-hidden="true" />
+          <span className="absolute left-6 -bottom-16 w-32 h-32 rounded-full bg-white/10" aria-hidden="true" />
+          <div className="relative z-10 flex items-center gap-4">
+            <span className="w-16 h-16 rounded-2xl bg-white/20 flex items-center justify-center text-4xl flex-shrink-0">
+              ♻️
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-lg font-extrabold leading-snug">زباله‌هامو می‌خوام بفروشم</p>
+              <p className="text-xs text-white/85 mt-1 leading-relaxed">
+                ثبت درخواست جمع‌آوری در چند ثانیه — یک جمع‌آور نزدیک می‌آید
+              </p>
+            </div>
+            <span className="text-2xl flex-shrink-0">‹</span>
+          </div>
+        </Link>
+      </div>
+
+      <div className="px-4 mt-3">
         <div className="rounded-3xl bg-gradient-to-l from-brand-600 to-brand-500 p-5 text-white shadow-lg animate-fade-up relative overflow-hidden">
           <span className="absolute -left-6 -top-10 w-32 h-32 rounded-full bg-white/10" aria-hidden="true" />
           <span className="absolute left-10 -bottom-12 w-24 h-24 rounded-full bg-white/10" aria-hidden="true" />
@@ -215,7 +240,7 @@ export default function Home() {
 
       <div className="px-4 mt-5">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-sm text-ink-900">خدمات سبزینو</h2>
+          <h2 className="font-bold text-sm text-ink-900">سایر خدمات</h2>
         </div>
         <div className="grid grid-cols-2 gap-3">
           {SERVICES.map((s) => (

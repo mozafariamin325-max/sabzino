@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  useAcceptRequest, useAdvanceRequest, useCollectorProfile, useMaterialCategories,
-  useMyAssignments, useNearbyOpenRequests, useToggleOnline, useWeighIn,
+  useAcceptRequest, useAdvanceRequest, useCollectorProfile, useCollectorTodayStats, useDismissRequest,
+  useMaterialCategories, useMyAssignments, useNearbyOpenRequests, useToggleOnline, useWeighIn,
 } from "../api/queries";
 import { Button, Card, CenterLoading, EmptyState, StatusPill, TopBar } from "../components/ui";
 import { STATUS_LABELS } from "../api/types";
@@ -19,7 +19,9 @@ export default function CollectorHome() {
   const toggleOnline = useToggleOnline();
   const { data: nearby } = useNearbyOpenRequests();
   const { data: assignments } = useMyAssignments();
+  const { data: todayStats } = useCollectorTodayStats();
   const acceptRequest = useAcceptRequest();
+  const dismissRequest = useDismissRequest();
   const advanceRequest = useAdvanceRequest();
   const weighIn = useWeighIn();
   const { data: categories } = useMaterialCategories();
@@ -78,7 +80,7 @@ export default function CollectorHome() {
         }
       />
 
-      <div className="px-4 grid grid-cols-3 gap-3 mb-5">
+      <div className="px-4 grid grid-cols-3 gap-3 mb-3">
         <Card className="p-3 text-center">
           <p className="text-lg font-bold text-brand-600">{profile.completed_jobs}</p>
           <p className="text-[11px] text-ink-500">مأموریت تکمیل‌شده</p>
@@ -90,6 +92,22 @@ export default function CollectorHome() {
         <Card className="p-3 text-center">
           <p className="text-lg font-bold text-brand-600">{profile.acceptance_rate}%</p>
           <p className="text-[11px] text-ink-500">نرخ موفقیت</p>
+        </Card>
+      </div>
+
+      <div className="px-4 mb-5">
+        <Card className="p-3.5 flex items-center justify-between bg-brand-50/60">
+          <p className="text-xs font-bold text-ink-900">📅 امروز</p>
+          <div className="flex items-center gap-4">
+            <div className="text-center">
+              <p className="text-base font-extrabold text-brand-700">{todayStats?.accepted_today ?? "—"}</p>
+              <p className="text-[10px] text-ink-500">پذیرفته</p>
+            </div>
+            <div className="text-center">
+              <p className="text-base font-extrabold text-brand-700">{todayStats?.completed_today ?? "—"}</p>
+              <p className="text-[10px] text-ink-500">تکمیل‌شده</p>
+            </div>
+          </div>
         </Card>
       </div>
 
@@ -160,14 +178,31 @@ export default function CollectorHome() {
               <Card key={r.uid} className="p-4">
                 <div className="flex items-center justify-between">
                   <p className="font-bold text-sm">#{r.code}</p>
-                  <p className="text-xs text-brand-600 font-bold">{formatToman(r.estimated_value)} ت (تخمینی)</p>
+                  <div className="flex items-center gap-1.5">
+                    {r.distance_km != null && (
+                      <span className="text-[10.5px] bg-brand-50 text-brand-700 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        📍 {r.distance_km.toFixed(1)} کیلومتر
+                      </span>
+                    )}
+                    <p className="text-xs text-brand-600 font-bold">{formatToman(r.estimated_value)} ت (تخمینی)</p>
+                  </div>
                 </div>
                 <p className="text-xs text-ink-600 mt-1">{r.address_text_snapshot}</p>
                 <p className="text-xs text-ink-500 mt-1">{r.materials.map((m) => m.name).join("، ")} — {r.amount_range_display}</p>
                 <p className="text-[10px] text-ink-400 mt-1">{toJalaliTime(r.created_at)}</p>
-                <Button full className="mt-3" loading={acceptRequest.isPending} onClick={() => acceptRequest.mutate(r.uid)}>
-                  پذیرش مأموریت
-                </Button>
+                <div className="flex items-center gap-2 mt-3">
+                  <Button
+                    variant="secondary"
+                    className="text-xs px-4"
+                    loading={dismissRequest.isPending}
+                    onClick={() => dismissRequest.mutate(r.uid)}
+                  >
+                    رد کردن
+                  </Button>
+                  <Button full loading={acceptRequest.isPending} onClick={() => acceptRequest.mutate(r.uid)}>
+                    پذیرش مأموریت
+                  </Button>
+                </div>
               </Card>
             ))}
           </div>

@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter, SimpleRouter
 from .views import (
     CollectionRequestViewSet, NearbyOpenRequestsView, MyAssignmentsView,
-    AcceptRequestView, UpdateAssignmentStatusView, WeighInView, RecurringScheduleViewSet,
+    AcceptRequestView, DismissRequestView, UpdateAssignmentStatusView, WeighInView, RecurringScheduleViewSet,
     AdminCollectionRequestViewSet,
 )
 
@@ -26,6 +26,7 @@ urlpatterns = [
     path("collector/nearby/", NearbyOpenRequestsView.as_view(), name="collector-nearby"),
     path("collector/my-assignments/", MyAssignmentsView.as_view(), name="collector-my-assignments"),
     path("<uuid:uid>/accept/", AcceptRequestView.as_view(), name="collection-accept"),
+    path("<uuid:uid>/dismiss/", DismissRequestView.as_view(), name="collection-dismiss"),
     path("<uuid:uid>/advance/", UpdateAssignmentStatusView.as_view(), name="collection-advance"),
     path("<uuid:uid>/weigh-in/", WeighInView.as_view(), name="collection-weigh-in"),
     path("recurring-schedules/", include(recurring_router.urls)),

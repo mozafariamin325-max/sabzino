@@ -107,6 +107,8 @@ export interface CollectionRequest {
   assignment: Assignment | null;
   weighing: WeighingRecord | null;
   created_at: string;
+  /** فقط در لیست «نزدیک من» جمع‌آور پر می‌شود؛ بقیه‌ی جاها null است. */
+  distance_km: number | null;
 }
 
 export interface AdminCollector {

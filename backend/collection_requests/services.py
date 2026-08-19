@@ -3,13 +3,19 @@ from datetime import timedelta
 from math import radians, sin, cos, sqrt, atan2
 from django.db import transaction
 from django.utils import timezone
-from .models import CollectionRequest, CollectionStatusLog, CollectionAssignment, RequestStatus, WeighingRecord
+from .models import CollectionRequest, CollectionStatusLog, CollectionAssignment, RequestStatus, WeighingRecord, RequestDismissal
 
 # rough midpoint (kg) used only for the "estimated value" shown to the citizen before weighing
 AMOUNT_RANGE_MIDPOINT = {
     "UNDER_5": Decimal("3"), "R5_10": Decimal("7.5"), "R10_20": Decimal("15"),
     "R20_50": Decimal("35"), "R50_100": Decimal("75"), "OVER_100": Decimal("120"),
 }
+
+# فاز ۱۰: دیسپچ هدفمند — شعاع (کیلومتر) و سقف تعداد جمع‌آورهایی که برای یک
+# درخواست جدید نوتیفیکیشن هدفمند می‌گیرند، جدا از لیست «نزدیک من» که همه‌ی
+# جمع‌آورهای آنلاین در هر لحظه می‌توانند خودشان مرور کنند.
+DISPATCH_RADIUS_KM = 15
+DISPATCH_MAX_COLLECTORS = 8
 
 
 def estimate_value(materials_qs, amount_range: str) -> Decimal:
@@ -48,17 +54,64 @@ def haversine_km(lat1, lng1, lat2, lng2):
 
 def find_nearby_open_requests(collector_profile, limit=20):
     """
-    MVP dispatch algorithm (spec section 11): online + approved collectors see
-    open (SEARCHING_COLLECTOR) requests ranked by distance. Simple now;
-    architecture leaves room for a smarter matching service later.
+    Collector job-board (spec section 11): online + approved collectors see
+    open (SEARCHING_COLLECTOR) requests ranked by distance, minus any request
+    this specific collector already dismissed (فاز ۱۰). Distance is attached
+    to each object (`_distance_km`) so the serializer can expose it — the
+    active push notification for the nearest candidates lives separately in
+    `dispatch_new_request()` below.
     """
-    open_requests = CollectionRequest.objects.filter(status=RequestStatus.SEARCHING_COLLECTOR).select_related("citizen")
+    dismissed_ids = RequestDismissal.objects.filter(collector=collector_profile).values_list("request_id", flat=True)
+    open_requests = (
+        CollectionRequest.objects.filter(status=RequestStatus.SEARCHING_COLLECTOR)
+        .exclude(id__in=dismissed_ids)
+        .select_related("citizen")
+    )
     scored = []
     for req in open_requests:
         dist = haversine_km(collector_profile.current_lat, collector_profile.current_lng, req.lat, req.lng)
+        req._distance_km = round(dist, 1) if dist < 9999 else None
         scored.append((dist, req))
     scored.sort(key=lambda x: x[0])
     return [req for _, req in scored[:limit]]
+
+
+def dismiss_request(collector_profile, request_obj: CollectionRequest):
+    """Hide a request from this collector's own nearby list only (فاز ۱۰: دکمه رد کردن)."""
+    RequestDismissal.objects.get_or_create(request=request_obj, collector=collector_profile)
+
+
+def dispatch_new_request(request_obj: CollectionRequest):
+    """
+    Push-style targeted dispatch (فاز ۱۰ — قدم اول به‌سمت موتور تطبیق واقعی
+    مثل اسنپ): به‌جای منتظرماندن تا جمع‌آورها خودشان صفحه‌ی «نزدیک من» را باز
+    کنند، بلافاصله بعد از ثبت یک درخواست، به نزدیک‌ترین جمع‌آورهای آنلاین و
+    تأییدشده در شعاع DISPATCH_RADIUS_KM نوتیفیکیشن هدفمند فرستاده می‌شود.
+    هنوز صف مشترک (اولین قبول‌کننده می‌برد) دست‌نخورده می‌ماند — این فقط
+    آگاه‌سازی است، نه قفل‌کردن درخواست برای یک جمع‌آور خاص.
+    """
+    from notifications.services import notify
+    from collectors.models import CollectorProfile
+
+    if request_obj.lat is None or request_obj.lng is None:
+        return
+    candidates = CollectorProfile.objects.filter(
+        is_online=True, verification_status="APPROVED",
+        current_lat__isnull=False, current_lng__isnull=False,
+    ).select_related("user")
+    scored = []
+    for c in candidates:
+        dist = haversine_km(c.current_lat, c.current_lng, request_obj.lat, request_obj.lng)
+        if dist <= DISPATCH_RADIUS_KM:
+            scored.append((dist, c))
+    scored.sort(key=lambda x: x[0])
+    for dist, collector in scored[:DISPATCH_MAX_COLLECTORS]:
+        notify(
+            collector.user,
+            "درخواست جمع‌آوری جدید نزدیک شما",
+            f"یک درخواست جدید حدود {dist:.1f} کیلومتر با شماست — همین حالا در دسترس است.",
+            link="/collector",
+        )
 
 
 @transaction.atomic
@@ -74,6 +127,19 @@ def accept_request(collector_profile, request_obj: CollectionRequest):
         request=request_obj, collector=collector_profile, accepted_at=timezone.now()
     )
     log_status(request_obj, RequestStatus.ACCEPTED, note="جمع‌آور پذیرفت", changed_by=collector_profile.user)
+
+    # فاز ۱۱: پیامک واقعی به شهروند — یک‌بار در طول عمر درخواست، پس حجم/هزینهٔ
+    # پیامک محدود می‌ماند (برخلاف دیسپچ به جمع‌آورها که عمداً فقط درون‌برنامه‌ای
+    # ماند تا هزینهٔ پیامک به چند گیرنده به‌ازای هر درخواست باز نشود).
+    from notifications.services import notify
+
+    notify(
+        request_obj.citizen,
+        "درخواست شما پذیرفته شد",
+        f"جمع‌آور درخواست #{request_obj.code} شما را پذیرفت و به‌زودی مراجعه می‌کند.",
+        link=f"/requests/{request_obj.uid}",
+        channel="SMS",
+    )
     return assignment
 
 
@@ -108,6 +174,18 @@ def complete_weighing(request_obj: CollectionRequest, material, weight_kg: Decim
         collector.save(update_fields=["completed_jobs"])
 
     log_status(request_obj, RequestStatus.COMPLETED, note="وزن‌کشی و تسویه انجام شد", changed_by=weighed_by)
+
+    # فاز ۱۱: پیامک تأیید واریز — رویدادی که کاربران ایرانی فرهنگاً انتظار
+    # پیامک بانکی‌مانند برایش دارند؛ یک‌بار در طول عمر درخواست.
+    from notifications.services import notify
+
+    notify(
+        request_obj.citizen,
+        "تسویه انجام شد",
+        f"وزن‌کشی درخواست #{request_obj.code} انجام شد و {int(total_value):,} تومان به کیف‌پولت واریز شد.",
+        link=f"/requests/{request_obj.uid}",
+        channel="SMS",
+    )
     return record
 
 
@@ -243,6 +321,7 @@ def generate_due_recurring_requests(today=None):
         req.estimated_value = estimate_value_for_items([(m, default_weight) for m in materials])
         req.save(update_fields=["estimated_value"])
         log_status(req, RequestStatus.SEARCHING_COLLECTOR, note="درخواست دوره‌ای خودکار", changed_by=schedule.citizen)
+        dispatch_new_request(req)
 
         schedule.last_generated_request = req
         schedule.next_run_date = _advance_next_run_date(schedule, today)
