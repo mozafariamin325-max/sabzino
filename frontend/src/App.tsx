@@ -67,10 +67,21 @@ function RequireBusinessRole({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * تمام صفحات لاگین‌شده (شهروند/جمع‌آور/اپراتور/ادمین) از ابتدا برای موبایل
+ * طراحی شده‌اند (بدون هیچ breakpoint ای در کل کدبیس تا پیش از این). روی
+ * تبلت/دسکتاپ همین رابط کاربری بدون هیچ محدودیتی تمام عرض صفحه را می‌گرفت
+ * و کشیده/بدشکل می‌شد. راه‌حل: محتوای هر صفحه در یک ستون هم‌عرض با
+ * BottomNav (که خودش از قبل max-w-md mx-auto دارد) قرار می‌گیرد — روی
+ * گوشی واقعی (کمتر از ۶۷۲px) این max-width اصلاً فعال نمی‌شود (عرض صفحه از
+ * ۲۸rem کمتر است)، پس هیچ تغییر بصری‌ای برای اکثریت کاربران واقعی (موبایل)
+ * رخ نمی‌دهد؛ فقط روی صفحه‌های بزرگ‌تر محتوا به‌جای کشیده‌شدن، به همان
+ * ستونی که BottomNav هم در آن مرکز است محدود می‌شود.
+ */
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh bg-[#f4faf6]">
-      {children}
+      <div className="max-w-md mx-auto">{children}</div>
       <BottomNav />
     </div>
   );

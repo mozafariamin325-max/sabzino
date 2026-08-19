@@ -59,9 +59,25 @@ export default function Profile() {
             </p>
             <p className="text-xs text-ink-500 mt-0.5">{user?.phone_number || user?.email}</p>
           </div>
-          <button className="text-xs text-brand-600 font-medium" onClick={() => setEditing((e) => !e)}>
-            {editing ? "انصراف" : "ویرایش"}
-          </button>
+          <div className="flex flex-col items-end gap-2">
+            <button className="text-xs text-brand-600 font-medium" onClick={() => setEditing((e) => !e)}>
+              {editing ? "انصراف" : "ویرایش"}
+            </button>
+            <button
+              className="flex items-center gap-1 text-xs text-red-600 font-medium"
+              onClick={() => {
+                logout();
+                navigate("/login", { replace: true });
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="M16 17l5-5-5-5" />
+                <path d="M21 12H9" />
+              </svg>
+              خروج
+            </button>
+          </div>
         </Card>
 
         {points && (
@@ -202,7 +218,7 @@ export default function Profile() {
           )}
         </Card>
 
-        <div className="mt-5 flex flex-col gap-2">
+        <div className="mt-5 flex flex-col gap-2 pb-24">
           <MenuLink to="/requests" icon="📦" label="درخواست‌های من" />
           <MenuLink to="/addresses" icon="📍" label="آدرس‌های من" />
           <MenuLink to="/wallet" icon="👛" label="کیف پول" />
@@ -221,16 +237,6 @@ export default function Profile() {
           {roles.includes("BUSINESS") && <MenuLink to="/business/BUSINESS" icon="🏬" label="داشبورد کسب‌وکار" />}
           {(user?.is_staff || roles.includes("MUNICIPALITY")) && <MenuLink to="/admin" icon="🛠️" label="داشبورد مدیریت" />}
         </div>
-
-        <button
-          onClick={() => {
-            logout();
-            navigate("/login", { replace: true });
-          }}
-          className="w-full mt-6 text-center text-red-600 text-sm font-medium py-3"
-        >
-          خروج از حساب
-        </button>
       </div>
     </div>
   );
