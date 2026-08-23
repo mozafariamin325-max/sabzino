@@ -27,6 +27,10 @@ class User(AbstractUser, UUIDModel):
 
     phone_number = models.CharField(max_length=15, unique=True, null=True, blank=True)
     phone_verified = models.BooleanField(default=False)
+    national_id = models.CharField(
+        max_length=10, unique=True, null=True, blank=True,
+        help_text="کد ملی ۱۰ رقمی — فقط برای کاربرانی که از مسیر جدید (OTP) ثبت‌نام کرده‌اند الزامی است؛ حساب‌های قدیمی‌تر می‌توانند خالی باشند.",
+    )
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True)
     referral_code = models.CharField(max_length=12, unique=True, null=True, blank=True)
     referred_by = models.ForeignKey(

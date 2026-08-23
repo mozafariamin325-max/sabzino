@@ -182,3 +182,13 @@ SABZINO_DEFAULT_POINTS_PER_KG = config("SABZINO_DEFAULT_POINTS_PER_KG", default=
 # حالت فقط لاگ می‌کند و هیچ خطایی روی جریان اصلی (تکمیل درخواست/کیف‌پول) نمی‌اندازد.
 SMS_IR_API_KEY = config("SMS_IR_API_KEY", default="")
 SMS_IR_LINE_NUMBER = config("SMS_IR_LINE_NUMBER", default="")
+
+# ---- فاز ۱۵: ورود با کد پیامکی (OTP) ----
+# طبق تصمیم صریح کاربر، فعلاً به‌جای مصرف واقعی اعتبار پیامکی sms.ir به‌ازای هر
+# ورود/ثبت‌نام، از یک «کد تستی ثابت» استفاده می‌شود (زیرساخت کامل و آماده است،
+# وقتی کاربر آماده بود کافی است OTP_TEST_MODE را False کند تا از send_sms_text
+# واقعی استفاده شود — هیچ تغییر دیگری لازم نیست).
+OTP_TEST_MODE = config("OTP_TEST_MODE", default=True, cast=bool)
+OTP_TEST_FIXED_CODE = config("OTP_TEST_FIXED_CODE", default="111111")
+OTP_EXPIRY_MINUTES = config("OTP_EXPIRY_MINUTES", default=2, cast=int)
+OTP_MAX_VERIFY_ATTEMPTS = config("OTP_MAX_VERIFY_ATTEMPTS", default=5, cast=int)

@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import generics, status, viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -6,7 +7,9 @@ from .models import Address, ProfileChangeRequest, ProfileChangeField, ProfileCh
 from .serializers import (
     RegisterSerializer, LoginSerializer, UserSerializer, AddressSerializer, tokens_for_user,
     ProfileChangeRequestSerializer, OrganizationDetailSerializer, apply_profile_change_decision,
+    OTPRequestSerializer, OTPVerifySerializer, OTPCompleteProfileSerializer,
 )
+from .services import request_otp, verify_otp, make_registration_token, find_user_by_phone
 
 PROTECTED_PROFILE_FIELDS = set(ProfileChangeField.values)
 
@@ -35,6 +38,83 @@ class LoginView(APIView):
         user = serializer.validated_data["user"]
         tokens = tokens_for_user(user)
         return Response({"success": True, "message": "ورود موفقیت‌آمیز بود.", "user": UserSerializer(user).data, **tokens})
+
+
+class OTPRequestView(APIView):
+    """فاز ۱۵: مرحلهٔ اول ورود با موبایل — ارسال کد (یا در OTP_TEST_MODE، کد تستی ثابت)."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = OTPRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone_number = serializer.validated_data["phone_number"]
+        try:
+            request_otp(phone_number)
+        except ValueError as e:
+            return Response({"success": False, "message": str(e)}, status=429)
+        response = {
+            "success": True,
+            "message": "کد تأیید ارسال شد.",
+            "expires_in_seconds": settings.OTP_EXPIRY_MINUTES * 60,
+        }
+        if settings.OTP_TEST_MODE:
+            response["test_code"] = settings.OTP_TEST_FIXED_CODE
+        return Response(response)
+
+
+class OTPVerifyView(APIView):
+    """
+    مرحلهٔ دوم — تأیید کد. اگر شماره قبلاً حساب داشته باشد، همان‌جا وارد
+    می‌شود (مثل ورود عادی، access/refresh می‌گیرد). اگر کاربر جدید است، حساب
+    هنوز ساخته نمی‌شود — فقط یک registration_token کوتاه‌عمر برمی‌گردد تا
+    فرانت‌اند فرم تکمیل پروفایل (نام/کدملی/شهر) را نشان دهد.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = OTPVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone_number = serializer.validated_data["phone_number"]
+        code = serializer.validated_data["code"]
+        try:
+            verify_otp(phone_number, code)
+        except ValueError as e:
+            return Response({"success": False, "message": str(e)}, status=400)
+
+        user = find_user_by_phone(phone_number)
+        if user:
+            if user.is_suspended:
+                return Response({"success": False, "message": "حساب کاربری شما مسدود شده است."}, status=403)
+            tokens = tokens_for_user(user)
+            return Response({
+                "success": True, "is_new_user": False,
+                "message": "ورود موفقیت‌آمیز بود.", "user": UserSerializer(user).data, **tokens,
+            })
+
+        return Response({
+            "success": True, "is_new_user": True,
+            "message": "شماره تأیید شد — برای تکمیل ثبت‌نام چند مورد کوچک لازم است.",
+            "registration_token": make_registration_token(phone_number),
+        })
+
+
+class OTPCompleteProfileView(generics.CreateAPIView):
+    """مرحلهٔ سوم (فقط کاربر جدید) — نام، کد ملی، شهر → ساخت حساب واقعی."""
+
+    serializer_class = OTPCompleteProfileSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        tokens = tokens_for_user(user)
+        return Response(
+            {"success": True, "message": "ثبت‌نام با موفقیت تکمیل شد.", "user": UserSerializer(user).data, **tokens},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class MeView(APIView):

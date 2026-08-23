@@ -4,7 +4,8 @@ from .models import RecyclingStation, StationOperator, StationTransaction
 
 @admin.register(RecyclingStation)
 class RecyclingStationAdmin(admin.ModelAdmin):
-    list_display = ("name", "address", "is_active", "capacity_kg_per_day")
+    list_display = ("name", "city", "address", "is_active", "capacity_kg_per_day")
+    list_filter = ("city", "is_active")
     filter_horizontal = ("accepted_materials",)
 
 

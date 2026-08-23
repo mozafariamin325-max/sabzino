@@ -67,6 +67,16 @@ class NearbyCollectorsView(views.APIView):
             is_online=True, verification_status="APPROVED",
             current_lat__isnull=False, current_lng__isnull=False,
         ).select_related("user")
+
+        # فاز ۱۵: نقشهٔ هر شهروند فقط خودروهای جمع‌آوری همان شهر را نشان می‌دهد
+        # (همان الگوی فیلتر شهر ایستگاه‌ها) — برای کاربر واردشده از پروفایلش،
+        # برای مهمان از پارامتر ?city=.
+        city_name = request.query_params.get("city")
+        if not city_name and request.user.is_authenticated:
+            city_name = request.user.city
+        if city_name:
+            qs = qs.filter(city=city_name)
+
         collectors = list(qs)
         if lat and lng:
             for c in collectors:

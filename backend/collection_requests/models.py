@@ -30,8 +30,25 @@ class AmountRange(models.TextChoices):
 
 
 def generate_request_code():
+    """
+    فاز ۱۵: باگ واقعی رفع‌شده — بازهٔ قبلی فقط ۹۰ هزار حالت داشت (SZ-10000 تا
+    SZ-99999)؛ بعد از اجراهای مکرر seed_demo در طول فازهای مختلف، برخورد
+    (collision) روی UNIQUE constraint کد رخ می‌داد و کل تراکنش seed_demo
+    (که atomic است) را rollback می‌کرد. حالا هم بازه شش‌رقمی شده (۹۰۰ هزار
+    حالت) و هم به‌جای صرفاً امیدوار بودن، صریحاً چک یکتایی تا موفقیت تکرار
+    می‌شود.
+    """
     import random
-    return f"SZ-{random.randint(10000, 99999)}"
+
+    for _ in range(20):
+        code = f"SZ-{random.randint(100000, 999999)}"
+        if not CollectionRequest.objects.filter(code=code).exists():
+            return code
+    # اگر ۲۰ بار پشت‌سرهم برخورد شد (عملاً غیرممکن)، یک مقدار مبتنی‌بر UUID
+    # که تضمین‌شده یکتاست برمی‌گردانیم تا هرگز کرش نکند.
+    import uuid
+
+    return f"SZ-{uuid.uuid4().hex[:8].upper()}"
 
 
 class CollectionRequest(TimeStampedModel, UUIDModel):

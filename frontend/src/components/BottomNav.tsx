@@ -50,10 +50,11 @@ function ProfileIcon({ active }: { active: boolean }) {
 // (به‌جای «کیف پول») تا اهمیت اثر سبز در معرض دید همیشگی باشد. کیف پول از
 // ناوبری پایین حذف نشده، فقط جابه‌جا شده — همچنان از کارت پررنگ «اعتبار
 // سبزینو» بالای صفحه خانه و از منوی پروفایل («کیف پول») همیشه در دسترس است.
+// فاز ۱۵: طبق درخواست کاربر، ترتیب «اثر من» و «درخواست» جابه‌جا شد.
 const items: NavItem[] = [
   { to: "/", label: "خانه", icon: (a) => <HomeIcon active={a} /> },
-  { to: "/requests/new", label: "درخواست", icon: (a) => <RequestsIcon active={a} /> },
   { to: "/green-impact", label: "اثر من", icon: (a) => <LeafIcon active={a} /> },
+  { to: "/requests/new", label: "درخواست", icon: (a) => <RequestsIcon active={a} /> },
   { to: "/stations", label: "نقشه", icon: (a) => <MapIcon active={a} /> },
   { to: "/profile", label: "پروفایل", icon: (a) => <ProfileIcon active={a} /> },
 ];

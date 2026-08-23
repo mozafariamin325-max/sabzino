@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import L from "leaflet";
-import { useStations, useNearbyCollectorsMap } from "../api/queries";
+import { useStations, useNearbyCollectorsMap, useAllCities } from "../api/queries";
+import { useAuthStore } from "../store/auth";
 import { Card, CenterLoading, TopBar } from "../components/ui";
 import "leaflet/dist/leaflet.css";
 
@@ -23,8 +24,15 @@ const YASUJ_CENTER: [number, number] = [30.6683, 51.5877];
 
 export default function Stations() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | undefined>(undefined);
-  const { data: stations, isLoading } = useStations(coords);
-  const { data: collectors } = useNearbyCollectorsMap(coords);
+  const guestCity = useAuthStore((s) => s.guestCity);
+  const user = useAuthStore((s) => s.user);
+  // فاز ۱۵: در حالت مهمان شهر از انتخاب مهمان، و برای کاربر واقعی از شهر
+  // پروفایلش می‌آید — نقشه و لیست فقط همین شهر را نشان می‌دهند.
+  const activeCityName = guestCity || user?.city || null;
+
+  const { data: stations, isLoading } = useStations(coords, guestCity);
+  const { data: collectors } = useNearbyCollectorsMap(coords, guestCity);
+  const { data: allCities } = useAllCities();
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -35,13 +43,30 @@ export default function Stations() {
     );
   }, []);
 
+  // فاز ۱۵: مرکز نقشه باید خودکار روی مختصات شهرِ فعال بنشیند (طبق درخواست
+  // کاربر) نه همیشه یاسوج؛ اگر مختصات آن شهر در دیتابیس نبود، به یاسوج
+  // برمی‌گردیم تا نقشه هرگز خالی/نامعتبر نماند.
+  const mapCenter = useMemo<[number, number]>(() => {
+    if (activeCityName && allCities) {
+      const match = allCities.find((c) => c.name === activeCityName);
+      if (match?.lat && match?.lng) return [Number(match.lat), Number(match.lng)];
+    }
+    return YASUJ_CENTER;
+  }, [activeCityName, allCities]);
+
   return (
     <div>
       <TopBar title="ایستگاه‌های بازیافت" subtitle="نزدیک‌ترین مراکز بازیافت را ببینید" />
 
       <div className="px-4 mb-4">
         <Card className="overflow-hidden h-56">
-          <MapContainer center={YASUJ_CENTER} zoom={13} style={{ height: "100%", width: "100%" }} scrollWheelZoom={false}>
+          <MapContainer
+            key={`${mapCenter[0]}-${mapCenter[1]}`}
+            center={mapCenter}
+            zoom={13}
+            style={{ height: "100%", width: "100%" }}
+            scrollWheelZoom={false}
+          >
             <TileLayer
               attribution='&copy; OpenStreetMap contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

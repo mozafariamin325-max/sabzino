@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
-import { useAuthStore } from "../store/auth";
+import { useAuthStore, type SabzinoUser } from "../store/auth";
 import type {
   Address, CollectionRequest, GreenPoints, Listing, MaterialCategory,
   Paginated, RecyclingStation, Wallet, WalletTransaction, OrganizationDetail,
@@ -36,6 +36,46 @@ export function useRegister() {
       city: string;
     }) => {
       const { data } = await api.post("/auth/register/", payload);
+      return data;
+    },
+    onSuccess: (data) => setAuth({ access: data.access, refresh: data.refresh }, data.user),
+  });
+}
+
+// فاز ۱۵: ورود با کد پیامکی (OTP) — سه مرحله: درخواست کد، تأیید کد
+// (خودکار ورود اگر حساب قدیمی باشد، یا registration_token اگر کاربر جدید
+// باشد)، و تکمیل پروفایل (فقط کاربر جدید).
+export function useRequestOtp() {
+  return useMutation({
+    mutationFn: async (payload: { phone_number: string }) => {
+      const { data } = await api.post("/auth/otp/request/", payload);
+      return data as { success: true; message: string; expires_in_seconds: number; test_code?: string };
+    },
+  });
+}
+
+export function useVerifyOtp() {
+  const setAuth = useAuthStore((s) => s.setAuth);
+  return useMutation({
+    mutationFn: async (payload: { phone_number: string; code: string }) => {
+      const { data } = await api.post("/auth/otp/verify/", payload);
+      return data as
+        | { success: true; is_new_user: false; message: string; user: SabzinoUser; access: string; refresh: string }
+        | { success: true; is_new_user: true; message: string; registration_token: string };
+    },
+    onSuccess: (data) => {
+      if (!data.is_new_user) setAuth({ access: data.access, refresh: data.refresh }, data.user);
+    },
+  });
+}
+
+export function useCompleteOtpProfile() {
+  const setAuth = useAuthStore((s) => s.setAuth);
+  return useMutation({
+    mutationFn: async (payload: {
+      registration_token: string; first_name: string; last_name: string; national_id: string; city: string;
+    }) => {
+      const { data } = await api.post("/auth/otp/complete-profile/", payload);
       return data;
     },
     onSuccess: (data) => setAuth({ access: data.access, refresh: data.refresh }, data.user),
@@ -403,22 +443,26 @@ export function useMaterialCategories() {
   });
 }
 
-export function useStations(coords?: { lat: number; lng: number }) {
+export function useStations(coords?: { lat: number; lng: number }, guestCity?: string | null) {
   return useQuery({
-    queryKey: ["stations", coords],
+    queryKey: ["stations", coords, guestCity],
     queryFn: async () => {
-      const params = coords ? { lat: coords.lat, lng: coords.lng } : {};
+      const params: Record<string, unknown> = coords ? { lat: coords.lat, lng: coords.lng } : {};
+      // فاز ۱۵: کاربر واردشده از پروفایلش فیلتر می‌شود (سمت بک‌اند)؛ مهمان
+      // چون شهرش در پروفایل نیست، شهر انتخابی‌اش را صریح می‌فرستد.
+      if (guestCity) params.city = guestCity;
       const { data } = await api.get<{ stations: RecyclingStation[] }>("/stations/", { params });
       return data.stations;
     },
   });
 }
 
-export function useNearbyCollectorsMap(coords?: { lat: number; lng: number }) {
+export function useNearbyCollectorsMap(coords?: { lat: number; lng: number }, guestCity?: string | null) {
   return useQuery({
-    queryKey: ["nearby-collectors-map", coords],
+    queryKey: ["nearby-collectors-map", coords, guestCity],
     queryFn: async () => {
-      const params = coords ? { lat: coords.lat, lng: coords.lng } : {};
+      const params: Record<string, unknown> = coords ? { lat: coords.lat, lng: coords.lng } : {};
+      if (guestCity) params.city = guestCity;
       const { data } = await api.get<{ collectors: NearbyCollector[] }>("/collectors/nearby/", { params });
       return data.collectors;
     },
@@ -520,9 +564,15 @@ export function useAdminPurchaseRequests() {
 
 // ---------------- ENVIRONMENTAL IMPACT ("اثر من") ----------------
 export function useMyImpact() {
+  // Home.tsx بازطراحی‌شده این هوک را هم برای ویجت «پسماند/درخت/کربن» صدا
+  // می‌زند؛ چون endpoint پشتش IsAuthenticated است، برای مهمان (بدون
+  // accessToken) باید غیرفعال بماند تا یک ۴۰۱ بی‌فایده نزند — همان الگوی
+  // فاز ۱۵ برای useWallet/useGreenPoints/useMyRequests/... .
+  const accessToken = useAuthStore((s) => s.accessToken);
   return useQuery({
     queryKey: ["my-impact"],
     queryFn: async () => (await api.get<{ impact: MyImpact }>("/impact/me/")).data.impact,
+    enabled: !!accessToken,
   });
 }
 
@@ -544,10 +594,12 @@ export function useClassifyWaste() {
 
 // ---------------- WALLET & POINTS ----------------
 export function useWallet() {
+  const accessToken = useAuthStore((s) => s.accessToken);
   return useQuery({
     queryKey: ["wallet"],
     queryFn: async () => (await api.get<{ wallet: Wallet }>("/wallet/me/")).data.wallet,
     refetchInterval: 30_000,
+    enabled: !!accessToken,
   });
 }
 
@@ -605,10 +657,12 @@ export function useRequestStoreRedemption() {
 }
 
 export function useGreenPoints() {
+  const accessToken = useAuthStore((s) => s.accessToken);
   return useQuery({
     queryKey: ["points"],
     queryFn: async () => (await api.get<{ points: GreenPoints }>("/rewards/points/me/")).data.points,
     refetchInterval: 30_000,
+    enabled: !!accessToken,
   });
 }
 
@@ -638,10 +692,12 @@ export function useChallenges() {
 
 // ---------------- COLLECTION REQUESTS (Citizen) ----------------
 export function useMyRequests() {
+  const accessToken = useAuthStore((s) => s.accessToken);
   return useQuery({
     queryKey: ["my-requests"],
     queryFn: async () => (await api.get<Paginated<CollectionRequest>>("/collections/")).data.results,
     refetchInterval: 15_000,
+    enabled: !!accessToken,
   });
 }
 
@@ -870,10 +926,12 @@ export async function downloadAdminExport(type: "collections" | "orders") {
 
 // ---------------- NOTIFICATIONS ----------------
 export function useNotifications() {
+  const accessToken = useAuthStore((s) => s.accessToken);
   return useQuery({
     queryKey: ["notifications"],
     queryFn: async () => (await api.get("/notifications/")).data.results,
     refetchInterval: 30_000,
+    enabled: !!accessToken,
   });
 }
 
@@ -911,9 +969,11 @@ export function useUpdateImpactProject() {
 }
 
 export function useMyGreenImpact() {
+  const accessToken = useAuthStore((s) => s.accessToken);
   return useQuery({
     queryKey: ["green-impact", "my-impact"],
     queryFn: async () => (await api.get<{ green_impact: MyGreenImpact }>("/green-impact/my-impact/")).data.green_impact,
+    enabled: !!accessToken,
   });
 }
 

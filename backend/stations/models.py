@@ -5,6 +5,10 @@ from core.models import TimeStampedModel, UUIDModel
 class RecyclingStation(TimeStampedModel, UUIDModel):
     name = models.CharField(max_length=128)
     address = models.CharField(max_length=255)
+    city = models.ForeignKey(
+        "locations.City", null=True, blank=True, on_delete=models.SET_NULL, related_name="stations",
+        help_text="نقشهٔ هر کاربر فقط ایستگاه‌های همین شهر را نشان می‌دهد — خالی یعنی در فیلتر شهری نمایش داده نمی‌شود.",
+    )
     lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     working_hours = models.CharField(max_length=128, default="۸ صبح تا ۸ شب")

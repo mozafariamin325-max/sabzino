@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     RegisterView, LoginView, MeView, AddressViewSet, ProfileChangeRequestViewSet,
     AdminProfileChangeRequestViewSet, OrganizationDetailView, AdminOrganizationViewSet,
+    OTPRequestView, OTPVerifyView, OTPCompleteProfileView,
 )
 
 router = DefaultRouter()
@@ -16,4 +17,7 @@ urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path("me/", MeView.as_view(), name="me"),
     path("organization/", OrganizationDetailView.as_view(), name="organization-detail"),
+    path("otp/request/", OTPRequestView.as_view(), name="otp-request"),
+    path("otp/verify/", OTPVerifyView.as_view(), name="otp-verify"),
+    path("otp/complete-profile/", OTPCompleteProfileView.as_view(), name="otp-complete-profile"),
 ] + router.urls

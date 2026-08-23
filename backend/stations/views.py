@@ -17,6 +17,18 @@ class RecyclingStationViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         lat, lng = request.query_params.get("lat"), request.query_params.get("lng")
         qs = self.filter_queryset(self.get_queryset())
+
+        # فاز ۱۵: نقشهٔ هر کاربر فقط ایستگاه‌های همان شهر — برای کاربر واردشده
+        # از شهر پروفایلش، برای مهمان از پارامتر ?city= (شهری که در همان لحظه
+        # روی صفحهٔ مهمان انتخاب کرده). وقتی فیلتر شهر فعال است، ایستگاه بدون
+        # شهر ثبت‌شده (city خالی) نمایش داده نمی‌شود — مدیر باید شهر هر ایستگاه
+        # جدید را مشخص کند.
+        city_name = request.query_params.get("city")
+        if not city_name and request.user.is_authenticated:
+            city_name = request.user.city
+        if city_name:
+            qs = qs.filter(city__name=city_name)
+
         stations = list(qs)
         if lat and lng:
             for s in stations:

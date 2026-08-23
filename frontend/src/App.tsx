@@ -5,7 +5,7 @@ import { getAvailableViews, viewPath } from "./lib/roles";
 import BottomNav from "./components/BottomNav";
 import { CenterLoading } from "./components/ui";
 
-import Login from "./pages/Login";
+import AuthScreen from "./pages/AuthScreen";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import RequestWizard from "./pages/RequestWizard";
@@ -31,12 +31,40 @@ import Store from "./pages/Store";
 import GreenImpact from "./pages/GreenImpact";
 import ImpactProjects from "./pages/ImpactProjects";
 import ImpactProjectDetail from "./pages/ImpactProjectDetail";
+import GuestGateNotice from "./components/GuestGateNotice";
 
+/**
+ * فاز ۱۵ — حالت مهمان: صفحات قابل‌مرور بدون ورود واقعی (نقشه، ماشین‌حساب،
+ * پروژه‌های اثر سبز و...) با accessToken یا isGuest باز می‌شوند. بقیهٔ
+ * صفحات یا با RequireRealAuth (ریدایرکت خشک به /login، بدون تغییر رفتار
+ * قبلی) یا — برای دو اقدام واقعیِ صراحتاً نام‌برده‌شده در درخواست کاربر
+ * (ثبت درخواست/کیف‌پول) — با RequireRealAccount (پیام دوستانهٔ CTA به‌جای
+ * ریدایرکت خشک برای کاربر مهمان) محافظت می‌شوند.
+ */
 function RequireAuth({ children }: { children: React.ReactNode }) {
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const isGuest = useAuthStore((s) => s.isGuest);
+  const location = useLocation();
+  if (!accessToken && !isGuest) return <Navigate to="/login" replace state={{ from: location }} />;
+  return <>{children}</>;
+}
+
+/** رفتار قبلی RequireAuth، بدون استثنای مهمان — برای صفحاتی که واقعاً حساب واقعی لازم دارند. */
+function RequireRealAuth({ children }: { children: React.ReactNode }) {
   const accessToken = useAuthStore((s) => s.accessToken);
   const location = useLocation();
   if (!accessToken) return <Navigate to="/login" replace state={{ from: location }} />;
   return <>{children}</>;
+}
+
+/** برای اقدامات واقعی که مرور مهمان کافی نیست: کاربر مهمان پیام CTA می‌بیند، کاربر کاملاً ناشناس مستقیم به /login می‌رود. */
+function RequireRealAccount({ children }: { children: React.ReactNode }) {
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const isGuest = useAuthStore((s) => s.isGuest);
+  const location = useLocation();
+  if (accessToken) return <>{children}</>;
+  if (isGuest) return <GuestGateNotice />;
+  return <Navigate to="/login" replace state={{ from: location }} />;
 }
 
 /**
@@ -95,34 +123,39 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={<AuthScreen />} />
       <Route path="/register" element={<Register />} />
 
+      {/* فاز ۱۵: صفحات قابل‌مرور برای مهمان (بدون ورود واقعی) */}
       <Route path="/" element={<RequireAuth><AppLayout><Dashboard /></AppLayout></RequireAuth>} />
-      <Route path="/requests/new" element={<RequireAuth><AppLayout><RequestWizard /></AppLayout></RequireAuth>} />
-      <Route path="/requests" element={<RequireAuth><AppLayout><RequestsList /></AppLayout></RequireAuth>} />
-      <Route path="/requests/:uid" element={<RequireAuth><AppLayout><RequestDetail /></AppLayout></RequireAuth>} />
-      <Route path="/wallet" element={<RequireAuth><AppLayout><WalletPage /></AppLayout></RequireAuth>} />
-      <Route path="/profile" element={<RequireAuth><AppLayout><Profile /></AppLayout></RequireAuth>} />
       <Route path="/stations" element={<RequireAuth><AppLayout><Stations /></AppLayout></RequireAuth>} />
-      <Route path="/materials" element={<RequireAuth><AppLayout><Materials /></AppLayout></RequireAuth>} />
-      <Route path="/marketplace" element={<RequireAuth><AppLayout><Marketplace /></AppLayout></RequireAuth>} />
-      <Route path="/store" element={<RequireAuth><AppLayout><Store /></AppLayout></RequireAuth>} />
-      <Route path="/notifications" element={<RequireAuth><AppLayout><Notifications /></AppLayout></RequireAuth>} />
-      <Route path="/leaderboard" element={<RequireAuth><AppLayout><Leaderboard /></AppLayout></RequireAuth>} />
       <Route path="/calculator" element={<RequireAuth><AppLayout><Calculator /></AppLayout></RequireAuth>} />
-      <Route path="/scan" element={<RequireAuth><AppLayout><CameraScan /></AppLayout></RequireAuth>} />
-      <Route path="/missions" element={<RequireAuth><AppLayout><Missions /></AppLayout></RequireAuth>} />
-      <Route path="/green-impact" element={<RequireAuth><AppLayout><GreenImpact /></AppLayout></RequireAuth>} />
+      <Route path="/materials" element={<RequireAuth><AppLayout><Materials /></AppLayout></RequireAuth>} />
       <Route path="/green-impact/projects" element={<RequireAuth><AppLayout><ImpactProjects /></AppLayout></RequireAuth>} />
       <Route path="/green-impact/projects/:uid" element={<RequireAuth><AppLayout><ImpactProjectDetail /></AppLayout></RequireAuth>} />
 
-      <Route path="/addresses" element={<RequireAuth><AppLayout><AddressBook /></AppLayout></RequireAuth>} />
-      <Route path="/collector/register" element={<RequireAuth><AppLayout><CollectorRegister /></AppLayout></RequireAuth>} />
-      <Route path="/collector" element={<RequireAuth><RequireRole view="COLLECTOR"><AppLayout><CollectorHome /></AppLayout></RequireRole></RequireAuth>} />
-      <Route path="/station-operator" element={<RequireAuth><RequireRole view="STATION_OPERATOR"><AppLayout><StationOperator /></AppLayout></RequireRole></RequireAuth>} />
-      <Route path="/business/:kind" element={<RequireAuth><RequireBusinessRole><AppLayout><BusinessDashboard /></AppLayout></RequireBusinessRole></RequireAuth>} />
-      <Route path="/admin" element={<RequireAuth><RequireRole view="ADMIN"><AppLayout><AdminDashboard /></AppLayout></RequireRole></RequireAuth>} />
+      {/* فاز ۱۵: اقدامات واقعی — کاربر مهمان به‌جای ریدایرکت، پیام CTA می‌بیند */}
+      <Route path="/requests/new" element={<RequireRealAccount><AppLayout><RequestWizard /></AppLayout></RequireRealAccount>} />
+      <Route path="/wallet" element={<RequireRealAccount><AppLayout><WalletPage /></AppLayout></RequireRealAccount>} />
+
+      {/* بقیهٔ صفحات: مثل قبل، فقط حساب واقعی */}
+      <Route path="/requests" element={<RequireRealAuth><AppLayout><RequestsList /></AppLayout></RequireRealAuth>} />
+      <Route path="/requests/:uid" element={<RequireRealAuth><AppLayout><RequestDetail /></AppLayout></RequireRealAuth>} />
+      <Route path="/profile" element={<RequireRealAuth><AppLayout><Profile /></AppLayout></RequireRealAuth>} />
+      <Route path="/marketplace" element={<RequireRealAuth><AppLayout><Marketplace /></AppLayout></RequireRealAuth>} />
+      <Route path="/store" element={<RequireRealAuth><AppLayout><Store /></AppLayout></RequireRealAuth>} />
+      <Route path="/notifications" element={<RequireRealAuth><AppLayout><Notifications /></AppLayout></RequireRealAuth>} />
+      <Route path="/leaderboard" element={<RequireRealAuth><AppLayout><Leaderboard /></AppLayout></RequireRealAuth>} />
+      <Route path="/scan" element={<RequireRealAuth><AppLayout><CameraScan /></AppLayout></RequireRealAuth>} />
+      <Route path="/missions" element={<RequireRealAuth><AppLayout><Missions /></AppLayout></RequireRealAuth>} />
+      <Route path="/green-impact" element={<RequireRealAuth><AppLayout><GreenImpact /></AppLayout></RequireRealAuth>} />
+
+      <Route path="/addresses" element={<RequireRealAuth><AppLayout><AddressBook /></AppLayout></RequireRealAuth>} />
+      <Route path="/collector/register" element={<RequireRealAuth><AppLayout><CollectorRegister /></AppLayout></RequireRealAuth>} />
+      <Route path="/collector" element={<RequireRealAuth><RequireRole view="COLLECTOR"><AppLayout><CollectorHome /></AppLayout></RequireRole></RequireRealAuth>} />
+      <Route path="/station-operator" element={<RequireRealAuth><RequireRole view="STATION_OPERATOR"><AppLayout><StationOperator /></AppLayout></RequireRole></RequireRealAuth>} />
+      <Route path="/business/:kind" element={<RequireRealAuth><RequireBusinessRole><AppLayout><BusinessDashboard /></AppLayout></RequireBusinessRole></RequireRealAuth>} />
+      <Route path="/admin" element={<RequireRealAuth><RequireRole view="ADMIN"><AppLayout><AdminDashboard /></AppLayout></RequireRole></RequireRealAuth>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

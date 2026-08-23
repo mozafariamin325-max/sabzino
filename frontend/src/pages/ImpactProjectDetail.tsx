@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useImpactProject, useMyGreenImpact } from "../api/queries";
+import { useAuthStore } from "../store/auth";
 import { IMPACT_CATEGORY_LABELS, type ImpactContribution } from "../api/types";
 import { Button, Card, CenterLoading, DemoBadge, EmptyState, TopBar } from "../components/ui";
 import { formatToman } from "../lib/format";
@@ -16,11 +17,21 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function ImpactProjectDetail() {
+  const navigate = useNavigate();
+  const isGuest = useAuthStore((s) => s.isGuest);
   const { uid } = useParams();
   const { data: project, isLoading } = useImpactProject(uid);
   const { data: impact } = useMyGreenImpact();
   const [contributing, setContributing] = useState(false);
   const [successContributions, setSuccessContributions] = useState<ImpactContribution[] | null>(null);
+
+  function handleContributeClick() {
+    if (isGuest) {
+      navigate("/login");
+      return;
+    }
+    setContributing(true);
+  }
 
   if (isLoading) return <CenterLoading />;
   if (!project) return <EmptyState icon="🌍" title="این طرح یافت نشد" />;
@@ -136,7 +147,7 @@ export default function ImpactProjectDetail() {
         </p>
 
         <div className="flex flex-col gap-2 pb-2">
-          <Button full disabled={project.status !== "ACTIVE"} onClick={() => setContributing(true)}>
+          <Button full disabled={project.status !== "ACTIVE"} onClick={handleContributeClick}>
             {project.status === "ACTIVE" ? "مشارکت در این طرح 🌱" : "این طرح در حال حاضر غیرفعال است"}
           </Button>
           <Button full variant="secondary" onClick={handleShare}>

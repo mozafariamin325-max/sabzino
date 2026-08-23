@@ -158,6 +158,23 @@ class Command(BaseCommand):
                 province=prov, name=city_name,
                 defaults={"landmark_name": landmark, "landmark_icon": icon, "has_identity": False},
             )
+
+        # فاز ۱۵: بقیهٔ شهرستان‌های استان کهگیلویه و بویراحمد — طبق درخواست کاربر
+        # (هویت محلی فعلاً غیرفعال، فقط برای این‌که در انتخاب شهر و نقشه موجود
+        # باشند؛ lat/lng تقریبی مرکز شهرستان است، برای فیلتر نقشه کافی است).
+        remaining_kb_cities = [
+            ("سی‌سخت", Decimal("30.9500"), Decimal("51.4333"), "🏔️"),
+            ("لیکک", Decimal("30.6667"), Decimal("50.3667"), "🌾"),
+            ("چرام", Decimal("30.7667"), Decimal("50.9333"), "🌲"),
+            ("باشت", Decimal("30.6333"), Decimal("50.2167"), "🏞️"),
+            ("لنده", Decimal("30.9667"), Decimal("50.4667"), "🌳"),
+        ]
+        for name, lat, lng, icon in remaining_kb_cities:
+            City.objects.get_or_create(
+                province=province, name=name,
+                defaults={"lat": lat, "lng": lng, "landmark_icon": icon, "has_identity": False},
+            )
+
         return province, city
 
     # ---------------------------------------------------------------- materials
@@ -457,10 +474,19 @@ class Command(BaseCommand):
         stations = []
         for i, (name, address, lat, lng) in enumerate(stations_data):
             station, created = RecyclingStation.objects.get_or_create(
-                name=name, defaults={"address": address, "lat": Decimal(lat), "lng": Decimal(lng), "phone_number": f"0741111{1000+i}"}
+                name=name,
+                defaults={
+                    "address": address, "lat": Decimal(lat), "lng": Decimal(lng),
+                    "phone_number": f"0741111{1000+i}", "city": city,
+                },
             )
             if created:
                 station.accepted_materials.set(all_materials)
+            elif station.city_id != city.id:
+                # فاز ۱۵: ایستگاه‌های ساخته‌شده در فازهای قبل (پیش از افزودن فیلد
+                # شهر) را هم عقب‌گرد پر می‌کند تا از فیلتر نقشهٔ شهری محو نشوند.
+                station.city = city
+                station.save(update_fields=["city"])
 
             op_user, u_created = User.objects.get_or_create(
                 username=f"station_op{i+1}",

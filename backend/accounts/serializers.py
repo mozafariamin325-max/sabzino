@@ -1,13 +1,27 @@
 import random
+import re
 import string
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
+from core.validators import is_valid_iranian_national_id
 from .models import (
     User, UserRole, Address, Role, OrganizationDetail, ProfileChangeRequest,
     ProfileChangeField, ProfileChangeStatus,
 )
+
+
+def normalize_ir_phone(value: str) -> str:
+    """۰۹۱۲۰۰۰۱۰۰۱ / +989120001001 / 00989120001001 همه به شکل یکسان ۰۹XXXXXXXXX درمی‌آیند."""
+    digits = re.sub(r"\D", "", value or "")
+    if digits.startswith("0098"):
+        digits = digits[4:]
+    elif digits.startswith("98"):
+        digits = digits[2:]
+    if digits and not digits.startswith("0"):
+        digits = "0" + digits
+    return digits
 
 
 def generate_referral_code():
@@ -168,6 +182,84 @@ class LoginSerializer(serializers.Serializer):
 def tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
+
+
+class OTPRequestSerializer(serializers.Serializer):
+    phone_number = serializers.CharField()
+
+    def validate_phone_number(self, value):
+        normalized = normalize_ir_phone(value)
+        if not re.fullmatch(r"09\d{9}", normalized):
+            raise serializers.ValidationError("شماره موبایل معتبر نیست — مثلاً ۰۹۱۲۰۰۰۱۰۰۱")
+        return normalized
+
+
+class OTPVerifySerializer(serializers.Serializer):
+    phone_number = serializers.CharField()
+    code = serializers.CharField(max_length=6, min_length=4)
+
+    def validate_phone_number(self, value):
+        return normalize_ir_phone(value)
+
+
+class OTPCompleteProfileSerializer(serializers.Serializer):
+    """کاربر جدیدی که تازه شمارهٔ خودش را با کد پیامکی تأیید کرده، این فرم کوتاه
+    (نام، کد ملی، شهر) را تکمیل می‌کند تا حساب واقعی ساخته شود."""
+
+    registration_token = serializers.CharField(write_only=True)
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150)
+    national_id = serializers.CharField(max_length=10)
+    city = serializers.CharField()
+
+    def validate_national_id(self, value):
+        value = re.sub(r"\D", "", value or "")
+        if not is_valid_iranian_national_id(value):
+            raise serializers.ValidationError("کد ملی وارد شده معتبر نیست.")
+        if User.objects.filter(national_id=value).exists():
+            raise serializers.ValidationError("این کد ملی قبلاً برای یک حساب دیگر ثبت شده است.")
+        return value
+
+    def validate_city(self, value):
+        from locations.models import City
+
+        if not City.objects.filter(name=value).exists():
+            raise serializers.ValidationError("شهر انتخاب‌شده معتبر نیست.")
+        return value
+
+    def create(self, validated_data):
+        from .services import read_registration_token
+
+        phone_number = read_registration_token(validated_data.pop("registration_token"))
+        if User.objects.filter(phone_number=phone_number).exists():
+            raise serializers.ValidationError("این شماره قبلاً ثبت‌نام کرده — مستقیم وارد شو.")
+
+        username = phone_number
+        n = 1
+        while User.objects.filter(username=username).exists():
+            n += 1
+            username = f"{phone_number}{n}"
+
+        user = User(
+            username=username,
+            phone_number=phone_number,
+            phone_verified=True,
+            first_name=validated_data["first_name"],
+            last_name=validated_data["last_name"],
+            national_id=validated_data["national_id"],
+            city=validated_data["city"],
+            referral_code=generate_referral_code(),
+        )
+        user.set_unusable_password()
+        user.save()
+        UserRole.objects.create(user=user, role=Role.CITIZEN, is_primary=True)
+
+        from wallet.services import ensure_wallet
+        from rewards.services import ensure_points_account
+
+        ensure_wallet(user)
+        ensure_points_account(user)
+        return user
 
 
 class AddressSerializer(serializers.ModelSerializer):

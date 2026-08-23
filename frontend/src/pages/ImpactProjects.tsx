@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useImpactProjects, useMyGreenImpact } from "../api/queries";
+import { useAuthStore } from "../store/auth";
 import {
   IMPACT_CATEGORY_ICONS, IMPACT_CATEGORY_LABELS, type ImpactCategory, type ImpactContribution, type ImpactProject,
 } from "../api/types";
@@ -102,11 +103,23 @@ function ProjectCard({ project, onContribute }: { project: ImpactProject; onCont
 }
 
 export default function ImpactProjects() {
+  const navigate = useNavigate();
+  // فاز ۱۵: مرور پروژه‌ها برای مهمان آزاد است، اما «مشارکت» یک اقدام واقعی
+  // (کسر از کیف‌پول) است — طبق همان منطق /requests/new و /wallet.
+  const isGuest = useAuthStore((s) => s.isGuest);
   const [category, setCategory] = useState<ImpactCategory | "ALL">("ALL");
   const { data: projects, isLoading } = useImpactProjects(category === "ALL" ? undefined : { category });
   const { data: impact } = useMyGreenImpact();
   const [contributeTarget, setContributeTarget] = useState<ImpactProject | null>(null);
   const [successContributions, setSuccessContributions] = useState<ImpactContribution[] | null>(null);
+
+  function handleContributeClick(project: ImpactProject) {
+    if (isGuest) {
+      navigate("/login");
+      return;
+    }
+    setContributeTarget(project);
+  }
 
   return (
     <div>
@@ -138,7 +151,7 @@ export default function ImpactProjects() {
         ) : (
           <div className="flex flex-col gap-3">
             {projects.map((p) => (
-              <ProjectCard key={p.uid} project={p} onContribute={setContributeTarget} />
+              <ProjectCard key={p.uid} project={p} onContribute={handleContributeClick} />
             ))}
           </div>
         )}
