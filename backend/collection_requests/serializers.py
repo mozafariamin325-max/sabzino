@@ -118,7 +118,27 @@ class CreateCollectionRequestSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         if not attrs.get("items_json") and not attrs.get("materials"):
-            raise serializers.ValidationError("حداقل یک نوع زباله را انتخاب کنید.")
+            raise serializers.ValidationError({"message": "حداقل یک نوع زباله را انتخاب کنید."})
+
+        request = self.context.get("request")
+        if request is not None and getattr(request.user, "is_authenticated", False):
+            lat, lng = attrs.get("lat"), attrs.get("lng")
+            address = attrs.get("address")
+            if lat is None and address is not None:
+                lat, lng = address.lat, address.lng
+            if lat is not None and lng is not None:
+                from locations.models import City
+                from core.geo import out_of_service_area
+
+                city = City.objects.filter(name=request.user.city).first()
+                is_out, distance_km = out_of_service_area(lat, lng, city)
+                if is_out:
+                    raise serializers.ValidationError({
+                        "message": (
+                            f"این آدرس خارج از محدودهٔ سرویس‌دهی شهر شماست ({request.user.city}) — "
+                            f"حدود {distance_km:.0f} کیلومتر با مرکز شهر فاصله دارد. لطفاً آدرسی داخل شهر خودتان وارد کنید."
+                        )
+                    })
         return attrs
 
     def create(self, validated_data):

@@ -434,6 +434,7 @@ export interface City {
   theme_color_from: string;
   theme_color_to: string;
   hero_tagline: string;
+  service_radius_km: number;
 }
 
 // ---------------- GAMIFICATION / MISSIONS ----------------

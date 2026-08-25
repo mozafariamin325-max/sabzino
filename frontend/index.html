@@ -6,8 +6,22 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0" />
-    <meta name="theme-color" content="#0f7a3d" />
+    <meta name="theme-color" content="#002d1c" />
     <meta name="description" content="سبزینو — مارکت‌پلیس هوشمند بازیافت. با بازیافت، آینده را سبز کنیم." />
+    <!--
+      آیکون‌های Material Symbols Outlined (طبق DESIGN.md ی Stitch) از CDN گوگل
+      فونت لود می‌شوند، نه به‌صورت self-hosted: فایل کامل این فونت (همهٔ
+      آیکون‌ها + کل بازهٔ وزن) حدود ۴ مگابایت است که هم بیلد PWA precache را
+      می‌شکند و هم عملکرد را خراب می‌کند؛ CDN گوگل با unicode-range فقط
+      گلیف‌های واقعاً استفاده‌شده در هر صفحه را دانلود می‌کند و توسط service
+      worker کش می‌شود (کش outline runtime، نه precache — پس بیلد را نمی‌شکند).
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      rel="stylesheet"
+    />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

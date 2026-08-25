@@ -268,6 +268,24 @@ class AddressSerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ("id", "user", "created_at", "updated_at")
 
+    def validate(self, attrs):
+        request = self.context.get("request")
+        lat, lng = attrs.get("lat"), attrs.get("lng")
+        if request is not None and getattr(request.user, "is_authenticated", False) and lat is not None and lng is not None:
+            from locations.models import City
+            from core.geo import out_of_service_area
+
+            city = City.objects.filter(name=request.user.city).first()
+            is_out, distance_km = out_of_service_area(lat, lng, city)
+            if is_out:
+                raise serializers.ValidationError({
+                    "message": (
+                        f"این آدرس خارج از محدودهٔ سرویس‌دهی شهر شماست ({request.user.city}) — "
+                        f"حدود {distance_km:.0f} کیلومتر با مرکز شهر فاصله دارد. لطفاً آدرسی داخل شهر خودتان وارد کنید."
+                    )
+                })
+        return attrs
+
 
 class ProfileChangeRequestSerializer(serializers.ModelSerializer):
     field_display = serializers.CharField(source="get_field_name_display", read_only=True)

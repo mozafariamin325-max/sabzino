@@ -203,7 +203,7 @@ export default function GreenImpact() {
       ) : (
         <div className="px-4 flex flex-col gap-4">
           {/* درخت اثر سبز + سطح/پیشرفت — عنصر اصلی و هویتی صفحه */}
-          <div className="rounded-3xl p-5 text-white relative overflow-hidden shadow-md" style={{ background: "linear-gradient(120deg, #0b3d24 0%, #14603a 45%, #1c8a4f 100%)" }}>
+          <div className="rounded-3xl p-5 text-on-primary relative overflow-hidden shadow-tinted-lg bg-gradient-to-br from-primary to-secondary">
             <span className="absolute -left-8 -top-10 w-32 h-32 rounded-full bg-white/10" aria-hidden="true" />
             <span className="absolute right-2 bottom-2 w-24 h-24 rounded-full bg-white/5" aria-hidden="true" />
 

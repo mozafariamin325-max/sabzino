@@ -1,7 +1,23 @@
 import type { ButtonHTMLAttributes, PropsWithChildren, ReactNode } from "react";
 
-export function Card({ children, className = "" }: PropsWithChildren<{ className?: string }>) {
-  return <div className={`bg-white rounded-2xl shadow-[0_1px_2px_rgba(15,122,61,0.06),0_8px_24px_-16px_rgba(15,122,61,0.25)] ${className}`}>{children}</div>;
+/**
+ * فاز ۴ (Stitch): کارت با سایهٔ رنگی (tinted shadow) طبق DESIGN.md —
+ * «Cards: White background, 16px radius, subtle Primary-tinted shadow» —
+ * به‌جای سایهٔ خنثای قبلی. یک نسخهٔ `glass` هم برای سطوح شناور/شیشه‌ای
+ * (نوار بالا، مودال‌های شناور) اضافه شده.
+ */
+export function Card({
+  children,
+  className = "",
+  glass = false,
+}: PropsWithChildren<{ className?: string; glass?: boolean }>) {
+  return (
+    <div
+      className={`${glass ? "glass" : "bg-surface-container-lowest"} rounded-2xl shadow-tinted ${className}`}
+    >
+      {children}
+    </div>
+  );
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -10,13 +26,19 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
 }
 
+/**
+ * فاز ۴ (Stitch): دکمه‌ها به شکل کامل-پیل (full-pill) طبق DESIGN.md —
+ * «Primary: Full-pill shape» / «Secondary: Transparent background, 1.5px
+ * Secondary Mint border». چون Button تنها کامپوننت دکمهٔ مشترک در کل اپ است،
+ * این تغییر شکل به‌صورت خودکار به هر ۲۵ صفحه اعمال می‌شود.
+ */
 export function Button({ variant = "primary", full, loading, className = "", children, disabled, ...rest }: ButtonProps) {
-  const base = "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-medium transition active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100";
+  const base = "inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-medium transition active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100";
   const variants: Record<string, string> = {
-    primary: "bg-brand-500 text-white shadow-sm hover:bg-brand-600",
-    secondary: "bg-brand-50 text-brand-700 hover:bg-brand-100",
-    ghost: "bg-transparent text-ink-700 hover:bg-black/5",
-    danger: "bg-red-50 text-red-600 hover:bg-red-100",
+    primary: "bg-primary text-on-primary shadow-tinted-sm hover:bg-primary-container",
+    secondary: "bg-transparent text-secondary border-[1.5px] border-secondary hover:bg-secondary-container/20",
+    ghost: "bg-transparent text-on-surface-variant hover:bg-surface-container",
+    danger: "bg-error-container text-on-error-container hover:brightness-95",
   };
   return (
     <button
@@ -25,7 +47,7 @@ export function Button({ variant = "primary", full, loading, className = "", chi
       {...rest}
     >
       {loading && (
-        <span className="h-4 w-4 rounded-full border-2 border-white/60 border-t-transparent animate-spin" />
+        <span className="h-4 w-4 rounded-full border-2 border-current/40 border-t-transparent animate-spin" />
       )}
       {children}
     </button>

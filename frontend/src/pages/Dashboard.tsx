@@ -1,12 +1,18 @@
-import { useEffect } from "react";
+import { Suspense, lazy, useEffect } from "react";
 import { useAuthStore } from "../store/auth";
 import { getAvailableViews } from "../lib/roles";
 import RoleSwitcher from "../components/RoleSwitcher";
+import { CenterLoading } from "../components/ui";
 import Home from "./Home";
-import CollectorHome from "./CollectorHome";
-import StationOperator from "./StationOperator";
-import BusinessDashboard from "./BusinessDashboard";
-import AdminDashboard from "./AdminDashboard";
+
+// فاز ۸ (Stitch): این چهار داشبورد نقش‌محور را اکثریت کاربران (شهروند
+// معمولی) هرگز نمی‌بینند — قبلاً همیشه در باندل اصلی بارگذاری می‌شدند چون
+// این فایل (که خودش eager است، چون مسیر "/" است) آن‌ها را static import
+// می‌کرد. با lazy، فقط وقتی activeView واقعاً همان نقش باشد دانلود می‌شوند.
+const CollectorHome = lazy(() => import("./CollectorHome"));
+const StationOperator = lazy(() => import("./StationOperator"));
+const BusinessDashboard = lazy(() => import("./BusinessDashboard"));
+const AdminDashboard = lazy(() => import("./AdminDashboard"));
 
 /**
  * Root "/" route. A single account can hold several roles at once (spec:
@@ -30,13 +36,15 @@ export default function Dashboard() {
   return (
     <div>
       <RoleSwitcher />
-      {resolvedView === "COLLECTOR" && <CollectorHome />}
-      {resolvedView === "STATION_OPERATOR" && <StationOperator />}
-      {resolvedView === "ADMIN" && <AdminDashboard />}
-      {["FACTORY", "WHOLESALER", "RECYCLING_CENTER", "BUSINESS"].includes(resolvedView) && (
-        <BusinessDashboard kind={resolvedView} />
-      )}
-      {resolvedView === "CITIZEN" && <Home />}
+      <Suspense fallback={<CenterLoading />}>
+        {resolvedView === "COLLECTOR" && <CollectorHome />}
+        {resolvedView === "STATION_OPERATOR" && <StationOperator />}
+        {resolvedView === "ADMIN" && <AdminDashboard />}
+        {["FACTORY", "WHOLESALER", "RECYCLING_CENTER", "BUSINESS"].includes(resolvedView) && (
+          <BusinessDashboard kind={resolvedView} />
+        )}
+        {resolvedView === "CITIZEN" && <Home />}
+      </Suspense>
     </div>
   );
 }

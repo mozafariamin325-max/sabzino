@@ -8,7 +8,7 @@ interface NavItem {
 
 function HomeIcon({ active }: { active: boolean }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#16a34a" : "#8a9a91"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#006d37" : "#717973"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 11.5 12 4l9 7.5" />
       <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9" />
     </svg>
@@ -16,7 +16,7 @@ function HomeIcon({ active }: { active: boolean }) {
 }
 function RequestsIcon({ active }: { active: boolean }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#16a34a" : "#8a9a91"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#006d37" : "#717973"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="4" y="3" width="16" height="18" rx="2" />
       <path d="M8 8h8M8 12h8M8 16h5" />
     </svg>
@@ -24,14 +24,14 @@ function RequestsIcon({ active }: { active: boolean }) {
 }
 function MapIcon({ active }: { active: boolean }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#16a34a" : "#8a9a91"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#006d37" : "#717973"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9 20 3 17V5l6 3m0 12 6-3m-6 3V8m6 9 6 3V10l-6-3m0 12V5m0 3 6-3" />
     </svg>
   );
 }
 function LeafIcon({ active }: { active: boolean }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#16a34a" : "#8a9a91"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#006d37" : "#717973"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20.5 3.5c-8 0-15 4-15 12a5.5 5.5 0 0 0 5.5 5.5c8 0 12-7 12-15a10 10 0 0 0-2.5-2.5Z" />
       <path d="M5.5 20.5c3-4 6-8 12-14" />
     </svg>
@@ -39,7 +39,7 @@ function LeafIcon({ active }: { active: boolean }) {
 }
 function ProfileIcon({ active }: { active: boolean }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#16a34a" : "#8a9a91"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#006d37" : "#717973"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="8" r="4" />
       <path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6" />
     </svg>
@@ -61,7 +61,7 @@ const items: NavItem[] = [
 
 export default function BottomNav() {
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-brand-100 pb-[env(safe-area-inset-bottom)]">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 glass shadow-[0_-1px_8px_rgba(0,45,28,0.06)] pb-[env(safe-area-inset-bottom)]">
       <div className="max-w-md mx-auto grid grid-cols-5">
         {items.map((item) => (
           <NavLink

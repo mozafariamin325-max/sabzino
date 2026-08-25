@@ -1,36 +1,46 @@
-import { Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { lazy, Suspense } from "react";
+import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { useAuthStore } from "./store/auth";
 import { useMe } from "./api/queries";
 import { getAvailableViews, viewPath } from "./lib/roles";
 import BottomNav from "./components/BottomNav";
+import Sidebar from "./components/Sidebar";
 import { CenterLoading } from "./components/ui";
+import brandmark from "./assets/brand/brandmark-256.png";
 
+// فاز ۸ (Stitch — بهینه‌سازی عملکرد): مسیرهای پرتردد (ورود/ثبت‌نام/داشبورد
+// خانه) همچنان eager هستند تا اولین رندر معطل نشود؛ بقیهٔ صفحات — به‌خصوص
+// داشبوردهای نقش‌محور (ادمین/جمع‌آور/اپراتور/کسب‌وکار که اکثریت کاربران
+// شهروند اصلاً هرگز نمی‌بینند) — با React.lazy جدا شده تا آن ۱٫۱ مگابایت
+// باندل واحد (یافتهٔ CRITICAL گزارش ممیزی) به تکه‌های کوچک‌تر و بار-تنبل
+// تقسیم شود. هیچ مسیر/رفتاری تغییر نکرده، فقط زمان بارگذاری کد جابه‌جا شده.
 import AuthScreen from "./pages/AuthScreen";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import RequestWizard from "./pages/RequestWizard";
-import RequestsList from "./pages/RequestsList";
-import RequestDetail from "./pages/RequestDetail";
-import WalletPage from "./pages/Wallet";
-import Profile from "./pages/Profile";
-import Stations from "./pages/Stations";
-import Materials from "./pages/Materials";
-import Marketplace from "./pages/Marketplace";
-import Notifications from "./pages/Notifications";
-import Leaderboard from "./pages/Leaderboard";
-import CollectorRegister from "./pages/CollectorRegister";
-import CollectorHome from "./pages/CollectorHome";
-import StationOperator from "./pages/StationOperator";
-import AdminDashboard from "./pages/AdminDashboard";
-import AddressBook from "./pages/AddressBook";
-import BusinessDashboard from "./pages/BusinessDashboard";
-import Calculator from "./pages/Calculator";
-import CameraScan from "./pages/CameraScan";
-import Missions from "./pages/Missions";
-import Store from "./pages/Store";
-import GreenImpact from "./pages/GreenImpact";
-import ImpactProjects from "./pages/ImpactProjects";
-import ImpactProjectDetail from "./pages/ImpactProjectDetail";
+
+const RequestsList = lazy(() => import("./pages/RequestsList"));
+const RequestDetail = lazy(() => import("./pages/RequestDetail"));
+const WalletPage = lazy(() => import("./pages/Wallet"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Stations = lazy(() => import("./pages/Stations"));
+const Materials = lazy(() => import("./pages/Materials"));
+const Marketplace = lazy(() => import("./pages/Marketplace"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const Leaderboard = lazy(() => import("./pages/Leaderboard"));
+const CollectorRegister = lazy(() => import("./pages/CollectorRegister"));
+const CollectorHome = lazy(() => import("./pages/CollectorHome"));
+const StationOperator = lazy(() => import("./pages/StationOperator"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const AddressBook = lazy(() => import("./pages/AddressBook"));
+const BusinessDashboard = lazy(() => import("./pages/BusinessDashboard"));
+const Calculator = lazy(() => import("./pages/Calculator"));
+const CameraScan = lazy(() => import("./pages/CameraScan"));
+const Missions = lazy(() => import("./pages/Missions"));
+const Store = lazy(() => import("./pages/Store"));
+const GreenImpact = lazy(() => import("./pages/GreenImpact"));
+const ImpactProjects = lazy(() => import("./pages/ImpactProjects"));
+const ImpactProjectDetail = lazy(() => import("./pages/ImpactProjectDetail"));
 import GuestGateNotice from "./components/GuestGateNotice";
 
 /**
@@ -96,20 +106,32 @@ function RequireBusinessRole({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * تمام صفحات لاگین‌شده (شهروند/جمع‌آور/اپراتور/ادمین) از ابتدا برای موبایل
- * طراحی شده‌اند (بدون هیچ breakpoint ای در کل کدبیس تا پیش از این). روی
- * تبلت/دسکتاپ همین رابط کاربری بدون هیچ محدودیتی تمام عرض صفحه را می‌گرفت
- * و کشیده/بدشکل می‌شد. راه‌حل: محتوای هر صفحه در یک ستون هم‌عرض با
- * BottomNav (که خودش از قبل max-w-md mx-auto دارد) قرار می‌گیرد — روی
- * گوشی واقعی (کمتر از ۶۷۲px) این max-width اصلاً فعال نمی‌شود (عرض صفحه از
- * ۲۸rem کمتر است)، پس هیچ تغییر بصری‌ای برای اکثریت کاربران واقعی (موبایل)
- * رخ نمی‌دهد؛ فقط روی صفحه‌های بزرگ‌تر محتوا به‌جای کشیده‌شدن، به همان
- * ستونی که BottomNav هم در آن مرکز است محدود می‌شود.
+ * فاز ۳ (Stitch — لایهٔ ریسپانسیو واقعی):
+ * موبایل (< md): دقیقاً رفتار قبلی، بدون تغییر — ستون تمام‌عرض + BottomNav ثابت.
+ * دسکتاپ/تبلت (>= md): به‌جای کِش‌آمدن همان ستون موبایل روی صفحهٔ بزرگ (باگ
+ * اصلیِ گزارش ممیزی)، یک سایدبار ناوبری ثابت سمت راست (Sidebar) + یک هدر
+ * شیشه‌ای ثابت بالای صفحه اضافه می‌شود و محتوا در یک عرض خوانا (max-w-3xl)
+ * داخل فضای باقی‌ماندهٔ کنار سایدبار جا می‌گیرد. BottomNav با md:hidden در
+ * دسکتاپ محو می‌شود؛ هیچ مسیر/منطقی تغییر نکرده، فقط پوستهٔ نمایش.
  */
 function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh bg-[#f4faf6]">
-      <div className="max-w-md mx-auto">{children}</div>
+    <div className="min-h-dvh bg-surface">
+      <header className="hidden md:flex fixed top-0 inset-x-0 z-30 h-16 items-center justify-between px-8 glass">
+        <Link to="/" className="flex items-center gap-2.5">
+          <img src={brandmark} alt="" className="w-7 h-7 object-contain" />
+          <span className="font-bold text-primary">سبزینو</span>
+        </Link>
+      </header>
+
+      <Sidebar />
+
+      <div className="md:mr-64 md:pt-16">
+        <div className="max-w-md md:max-w-3xl mx-auto md:mx-0 md:px-10 md:py-8">
+          <Suspense fallback={<CenterLoading />}>{children}</Suspense>
+        </div>
+      </div>
+
       <BottomNav />
     </div>
   );

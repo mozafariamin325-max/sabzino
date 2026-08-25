@@ -31,6 +31,11 @@ class City(TimeStampedModel):
     theme_color_to = models.CharField(max_length=9, blank=True, help_text="کد رنگ hex پایان گرادیان، مثلاً #16a34a")
     hero_tagline = models.CharField(max_length=140, blank=True, help_text="شعار کوتاه هویت محلی این شهر")
 
+    service_radius_km = models.PositiveIntegerField(
+        default=30,
+        help_text="شعاع سرویس‌دهی (کیلومتر) از مرکز شهر — آدرس‌های خارج از این شعاع هنگام ثبت درخواست/آدرس رد می‌شوند.",
+    )
+
     class Meta:
         unique_together = ("province", "name")
 

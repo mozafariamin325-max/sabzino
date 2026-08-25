@@ -10,22 +10,18 @@ import { curatedHomePrices } from "../lib/homePrices";
 import brandmark from "../assets/brand/brandmark-256.png";
 
 /**
- * بازطراحی صفحهٔ اصلی (طبق بریف UX/UI کاربر، ۲۰۲۶-۰۸-۲۳):
- * قبلاً ۴ بنر بزرگ تمام‌عرض با رنگ‌های مختلف پشت‌سرهم (CTA سبز فسفری، کارت
- * کیف‌پول سبز تیره، بنر «اثر سبز» نارنجی، بنر «محاسبه‌گر» سبز تیرهٔ دیگر)
- * باعث سردرگمی بصری و نبود اولویت مشخص می‌شد. اکنون: یک CTA اصلی برجسته،
- * یک ویجت کامپکت «کیف‌پول + آمار زیست‌محیطی»، یک گرید ۴تایی منظم برای
- * مهم‌ترین خدمات جانبی (به‌جای بنرهای پراکنده + گرید ۵تایی قبلی)، و یک
- * ردیف کوچک‌تر و کم‌رنگ‌تر برای خدمات فرعی (دوربین/محاسبه‌گر/ماموریت‌ها —
- * چیزی حذف نشده، فقط اولویتش پایین‌تر آمده).
+ * بازطراحی صفحهٔ اصلی (طبق بریف UX/UI کاربر، ۲۰۲۶-۰۸-۲۳؛ ساختار/اولویت‌بندی
+ * محتوا حفظ شده): قبلاً ۴ بنر بزرگ تمام‌عرض با رنگ‌های مختلف پشت‌سرهم باعث
+ * سردرگمی بصری می‌شد. اکنون: یک CTA اصلی برجسته، یک ویجت کامپکت «کیف‌پول +
+ * آمار زیست‌محیطی»، یک گرید ۴تایی منظم برای مهم‌ترین خدمات، و یک ردیف
+ * کوچک‌تر برای خدمات فرعی — چیزی حذف نشده، فقط اولویت بصری تنظیم شده.
  *
- * پالت رنگی جدید (#10B981 سبز زمردی / #064E3B سبز تیره / #F4F7F6 پس‌زمینه)
- * طبق تصمیم صریح کاربر «فقط در صفحهٔ اصلی» به‌کار رفته — پالت برند اصلی اپ
- * (brand-500 = #16a34a) در همهٔ صفحات دیگر دست‌نخورده می‌ماند.
+ * فاز ۴ (Stitch): پالت موقتِ محلی («فقط صفحهٔ اصلی») که قبلاً این‌جا تعریف
+ * شده بود، با توکن‌های یکپارچهٔ Stitch (primary/secondary/surface —
+ * index.css) جایگزین شد تا صفحهٔ اصلی هم از همان زبان بصری کل اپ استفاده
+ * کند؛ گرادیان CTA اکنون primary→secondary است، دقیقاً مطابق بنر Dashboard
+ * در مرجع Stitch (_4/code.html: bg-gradient-to-br from-primary to-secondary).
  */
-const HOME_PRIMARY = "#10B981";
-const HOME_PRIMARY_DARK = "#064E3B";
-const HOME_BG = "#F4F7F6";
 
 // طبق بریف: گرید اصلی خدمات دقیقاً همین ۴ مورد را نشان می‌دهد.
 const PRIMARY_SERVICES = [
@@ -92,7 +88,7 @@ export default function Home() {
   const treesEstimate = myImpact ? Math.round(myImpact.co2_kg_saved_estimated / CO2_KG_PER_TREE_PER_YEAR) : null;
 
   return (
-    <div style={{ background: HOME_BG }} className="min-h-full pb-2">
+    <div className="min-h-full pb-2 bg-surface">
       <div className="flex items-center justify-between px-4 pt-5 pb-2">
         <Link to="/notifications" className="relative w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm">
           🔔
@@ -137,8 +133,7 @@ export default function Home() {
       <div className="px-4 mt-3">
         <Link
           to="/requests/new"
-          className="block rounded-3xl p-5 text-white relative overflow-hidden shadow-lg active:scale-[0.98] transition animate-fade-up"
-          style={{ background: `linear-gradient(135deg, ${HOME_PRIMARY} 0%, ${HOME_PRIMARY_DARK} 100%)` }}
+          className="block rounded-3xl p-5 text-on-primary relative overflow-hidden shadow-tinted-lg active:scale-[0.98] transition animate-fade-up bg-gradient-to-br from-primary to-secondary"
         >
           <span className="absolute -left-10 -top-14 w-40 h-40 rounded-full bg-white/10" aria-hidden="true" />
           <span className="absolute left-6 -bottom-16 w-32 h-32 rounded-full bg-white/10" aria-hidden="true" />
@@ -167,22 +162,18 @@ export default function Home() {
                 {walletLoading ? (
                   <div className="h-7 w-24 bg-slate-100 rounded-lg animate-pulse mt-1" />
                 ) : (
-                  <p className="text-xl font-extrabold mt-0.5" style={{ color: HOME_PRIMARY_DARK }}>
+                  <p className="text-xl font-extrabold mt-0.5 text-primary">
                     {formatToman(wallet?.balance)} <span className="text-xs font-normal text-ink-500">تومان</span>
                   </p>
                 )}
               </div>
               <div className="flex items-center gap-2">
-                <span
-                  className="w-10 h-10 rounded-xl flex items-center justify-center text-lg"
-                  style={{ background: `${HOME_PRIMARY}1a` }}
-                >
+                <span className="w-10 h-10 rounded-xl flex items-center justify-center text-lg bg-secondary/10">
                   👛
                 </span>
                 <Link
                   to="/wallet"
-                  className="text-xs font-medium px-3 py-2 rounded-xl text-white"
-                  style={{ background: HOME_PRIMARY }}
+                  className="text-xs font-medium px-3.5 py-2 rounded-full text-on-secondary bg-secondary"
                 >
                   شارژ و برداشت
                 </Link>
@@ -218,8 +209,7 @@ export default function Home() {
           <button
             type="button"
             onClick={() => navigate("/login")}
-            className="w-full text-right rounded-3xl p-5 text-white shadow-lg animate-fade-up relative overflow-hidden"
-            style={{ background: `linear-gradient(135deg, ${HOME_PRIMARY} 0%, ${HOME_PRIMARY_DARK} 100%)` }}
+            className="w-full text-right rounded-3xl p-5 text-on-primary shadow-tinted-lg animate-fade-up relative overflow-hidden bg-gradient-to-br from-primary to-secondary"
           >
             <span className="absolute -left-6 -top-10 w-32 h-32 rounded-full bg-white/10" aria-hidden="true" />
             <div className="relative z-10 flex items-center gap-3">
@@ -246,10 +236,7 @@ export default function Home() {
               to={s.to}
               className="rounded-2xl bg-white p-4 flex items-center gap-3 shadow-[0_1px_2px_rgba(6,78,59,0.06)] active:scale-[0.98] transition"
             >
-              <span
-                className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0"
-                style={{ background: `${HOME_PRIMARY}1a` }}
-              >
+              <span className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 bg-secondary/10">
                 {s.icon}
               </span>
               <span className="text-sm font-medium text-ink-800 leading-snug">{s.label}</span>
@@ -282,7 +269,7 @@ export default function Home() {
       <div className="px-4 mt-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold text-sm text-ink-900">قیمت روز ضایعات</h2>
-          <Link to="/materials" className="text-xs font-medium" style={{ color: HOME_PRIMARY_DARK }}>
+          <Link to="/materials" className="text-xs font-medium text-primary">
             مشاهده همه
           </Link>
         </div>
@@ -294,14 +281,11 @@ export default function Home() {
           <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
             {homePrices.map((p) => (
               <Card key={p.id} className="p-3.5 flex-shrink-0 w-[136px]">
-                <span
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-base mb-2"
-                  style={{ background: `${HOME_PRIMARY}1a` }}
-                >
+                <span className="w-8 h-8 rounded-xl flex items-center justify-center text-base mb-2 bg-secondary/10">
                   {p.material_icon || "♻️"}
                 </span>
                 <p className="text-xs font-bold text-ink-900 truncate">{p.label}</p>
-                <p className="text-sm font-extrabold mt-1.5" style={{ color: HOME_PRIMARY_DARK }}>
+                <p className="text-sm font-extrabold mt-1.5 text-primary">
                   {formatToman(p.price_per_unit)} <span className="text-[10px] font-normal text-ink-500">ت/{p.unit_display}</span>
                 </p>
                 <p className="text-[9.5px] text-ink-400 mt-1.5">{new Date(p.effective_from).toLocaleDateString("fa-IR")}</p>
@@ -319,7 +303,7 @@ export default function Home() {
         <div className="px-4 mt-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-bold text-sm text-ink-900">وضعیت درخواست</h2>
-            <Link to="/requests" className="text-xs font-medium" style={{ color: HOME_PRIMARY_DARK }}>
+            <Link to="/requests" className="text-xs font-medium text-primary">
               مشاهده همه
             </Link>
           </div>
@@ -340,22 +324,15 @@ export default function Home() {
                       <div key={label} className="flex-1 flex flex-col items-center">
                         <div className="flex items-center w-full">
                           {i > 0 && (
-                            <div
-                              className="h-0.5 flex-1"
-                              style={{ background: done ? HOME_PRIMARY : "#e2e8f0" }}
-                            />
+                            <div className={`h-0.5 flex-1 ${done ? "bg-secondary" : "bg-surface-container-high"}`} />
                           )}
                           <span
-                            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-white font-bold shrink-0"
-                            style={{ background: done ? HOME_PRIMARY : "#cbd5e1" }}
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-white font-bold shrink-0 ${done ? "bg-secondary" : "bg-outline-variant"}`}
                           >
                             {i + 1}
                           </span>
                           {i < STAGE_LABELS.length - 1 && (
-                            <div
-                              className="h-0.5 flex-1"
-                              style={{ background: i < stage ? HOME_PRIMARY : "#e2e8f0" }}
-                            />
+                            <div className={`h-0.5 flex-1 ${i < stage ? "bg-secondary" : "bg-surface-container-high"}`} />
                           )}
                         </div>
                         <p className="text-[10px] text-ink-500 mt-1.5 text-center">{label}</p>

@@ -62,6 +62,9 @@ class Command(BaseCommand):
         citizens = self.seed_citizens(20, city)
         collectors = self.seed_collectors(citizens[:10], city)
         stations = self.seed_stations(city, categories)
+        # رفع باگ: نقشهٔ کاربران شهرهای دیگر (فعلاً شیراز) خالی نماند —
+        # یاسوج توسط seed_stations/seed_collectors بالا پوشش داده می‌شود.
+        self.seed_secondary_city_map_data("شیراز", categories)
         self.seed_marketplace_orgs(city, categories)
         self.seed_requests_and_transactions(citizens, collectors, stations, categories)
         self.seed_badges_and_challenges()
@@ -501,6 +504,89 @@ class Command(BaseCommand):
             ensure_points_account(op_user)
             stations.append(station)
         return stations
+
+    def seed_secondary_city_map_data(self, city_name, categories):
+        """
+        باگ گزارش‌شده: کاربری که با شهر شیراز ثبت‌نام می‌کند نقشه/ایستگاه‌ها/
+        جمع‌آورها را خالی می‌بیند — چون فیلتر شهری بک‌اند (stations/views.py،
+        collectors/views.py) درست کار می‌کند، اما تا این‌جا هیچ ایستگاه یا
+        جمع‌آوری با city=«شیراز» ساخته نشده بود. این متد فقط برای شهرهای
+        فرعی (غیر از یاسوج که seed_stations/seed_collectors آن را می‌سازند)
+        چند ایستگاه و جمع‌آور نمونهٔ آنلاین/تأییدشده می‌سازد تا نقشهٔ آن شهر
+        خالی نماند. کم‌حجم و مستقل نگه داشته شده تا داده‌های یاسوج (که جاهای
+        دیگر کد به آن‌ها وابسته‌اند) دست‌نخورده بمانند.
+        """
+        try:
+            city = City.objects.get(name=city_name)
+        except City.DoesNotExist:
+            self.stdout.write(self.style.WARNING(f"شهر «{city_name}» در locations.City یافت نشد — از افزودن نقشهٔ نمونه صرف‌نظر شد."))
+            return
+        if city.lat is None or city.lng is None:
+            return
+
+        all_materials = list(Material.objects.all())
+        base_lat, base_lng = float(city.lat), float(city.lng)
+
+        stations_data = [
+            (f"ایستگاه بازیافت مرکز {city_name}", f"{city_name}، میدان مرکزی", base_lat + 0.01, base_lng - 0.01),
+            (f"ایستگاه بازیافت شمال {city_name}", f"{city_name}، منطقهٔ شمالی", base_lat + 0.02, base_lng + 0.015),
+        ]
+        for name, address, lat, lng in stations_data:
+            station, created = RecyclingStation.objects.get_or_create(
+                name=name,
+                defaults={
+                    "address": address, "lat": Decimal(str(round(lat, 6))), "lng": Decimal(str(round(lng, 6))),
+                    "phone_number": "0710000000", "city": city,
+                },
+            )
+            if created:
+                station.accepted_materials.set(all_materials)
+            elif station.city_id != city.id:
+                station.city = city
+                station.save(update_fields=["city"])
+
+        vehicle_types = ["PICKUP", "MOTORCYCLE", "VAN"]
+        for i in range(3):
+            username = f"collector_{city_name}_{i+1}"
+            user, u_created = User.objects.get_or_create(
+                username=username,
+                defaults={
+                    "email": f"{username}@sabzino.demo", "first_name": random.choice(FIRST_NAMES),
+                    "last_name": random.choice(LAST_NAMES), "city": city_name,
+                },
+            )
+            if u_created:
+                user.set_password("Demo@12345")
+                user.save()
+            UserRole.objects.get_or_create(user=user, role=Role.COLLECTOR)
+            ensure_wallet(user)
+            ensure_points_account(user)
+            profile, p_created = CollectorProfile.objects.get_or_create(
+                user=user,
+                defaults={
+                    "national_id": f"32{i:08d}",
+                    "city": city_name,
+                    "service_area": f"مرکز {city_name}",
+                    "bank_account_number": f"02000{i:05d}",
+                    "sheba_number": f"IR{200000000000000000000000000 + i}"[:26],
+                    "verification_status": VerificationStatus.APPROVED,
+                    "is_online": True,
+                    "current_lat": Decimal(str(round(base_lat + random.uniform(-0.02, 0.02), 6))),
+                    "current_lng": Decimal(str(round(base_lng + random.uniform(-0.02, 0.02), 6))),
+                    "rating_avg": Decimal(str(round(random.uniform(4.0, 5.0), 2))),
+                    "completed_jobs": random.randint(5, 80),
+                },
+            )
+            if profile.city != city_name:
+                profile.city = city_name
+                profile.is_online = True
+                profile.save(update_fields=["city", "is_online"])
+            if p_created:
+                Vehicle.objects.create(
+                    collector=profile, brand="زامیاد", model="وانت", year=1400 + i,
+                    plate_number=f"۱۱ ایران {211 + i}", vehicle_type=vehicle_types[i % 3],
+                    capacity_kg=Decimal(str(random.choice([100, 200, 500]))), color="سفید",
+                )
 
     def seed_marketplace_orgs(self, city, categories):
         all_materials = list(Material.objects.all())

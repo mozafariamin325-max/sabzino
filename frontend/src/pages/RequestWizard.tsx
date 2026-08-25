@@ -1,17 +1,31 @@
 import { useMemo, useState } from "react";
 import {
   useAddresses, useCreateAddress, useCreateRequest, useCreateRecurringSchedule,
-  useMaterialCategories,
+  useMaterialCategories, useAllCities,
 } from "../api/queries";
 import { WEEKDAY_LABELS, type Address } from "../api/types";
 import { Button, Card, CenterLoading, TopBar } from "../components/ui";
 import { formatToman, toJalaliTime } from "../lib/format";
 import AddressMapPicker from "../components/AddressMapPicker";
 import RequestSuccessModal from "../components/RequestSuccessModal";
+import { useAuthStore } from "../store/auth";
 
 const STEPS = ["مواد و وزن", "آدرس", "زمان‌بندی", "توضیحات", "تأیید"];
 const YASUJ_CENTER = { lat: 30.6683, lng: 51.5877 };
 const MAX_WEIGHT_KG = 200;
+// هشدار فوری سمت کلاینت اگر نقطهٔ انتخابی روی نقشه خیلی از مرکز شهر کاربر
+// دور باشد. فقط برای راهنمایی آنی است؛ تصمیم نهایی (رد/قبول) همیشه با
+// اعتبارسنجی بک‌اند است (core/geo.py، City.service_radius_km).
+const OUT_OF_AREA_WARN_KM = 30;
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const r = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // فاز ۱۴: بازه‌های ساعتی تقریبی برای جمع‌آوری دوره‌ای — به‌جای یک عدد ساعت
 // دقیق («۹»)، شهروند یک بازهٔ یک‌ساعته انتخاب می‌کند (مثلاً «۹ تا ۱۰»)؛
@@ -27,17 +41,32 @@ export default function RequestWizard() {
   const [step, setStep] = useState(0);
   const { data: categories, isLoading } = useMaterialCategories();
   const { data: addresses } = useAddresses();
+  const { data: allCities } = useAllCities();
+  const user = useAuthStore((s) => s.user);
   const createAddress = useCreateAddress();
   const createRequest = useCreateRequest();
   const createSchedule = useCreateRecurringSchedule();
+
+  // شهر ثبت‌نامی کاربر — نقشهٔ انتخاب آدرس باید روی همین شهر باز شود، نه
+  // همیشه یاسوج (باگ قبلی: کاربر شیراز هم نقشه را از یاسوج می‌دید). اگر
+  // مختصات شهر کاربر در دیتابیس نبود، به یاسوج برمی‌گردیم تا نقشه هرگز
+  // خالی/نامعتبر نماند.
+  const activeCityName = user?.city || null;
+  const cityCenter = useMemo(() => {
+    if (activeCityName && allCities) {
+      const match = allCities.find((c) => c.name === activeCityName);
+      if (match?.lat && match?.lng) return { lat: Number(match.lat), lng: Number(match.lng) };
+    }
+    return YASUJ_CENTER;
+  }, [activeCityName, allCities]);
 
   const [items, setItems] = useState<Record<number, ItemState>>({});
   const [addressId, setAddressId] = useState<number | null>(null);
   const [addingNewAddress, setAddingNewAddress] = useState(false);
   const [newAddressTitle, setNewAddressTitle] = useState("آدرس جدید");
   const [newAddress, setNewAddress] = useState("");
-  const [newLat, setNewLat] = useState(YASUJ_CENTER.lat);
-  const [newLng, setNewLng] = useState(YASUJ_CENTER.lng);
+  const [newLat, setNewLat] = useState<number | null>(null);
+  const [newLng, setNewLng] = useState<number | null>(null);
 
   const [scheduleMode, setScheduleMode] = useState<"ONCE" | "RECURRING">("ONCE");
   const [preferredTime, setPreferredTime] = useState("");
@@ -74,6 +103,10 @@ export default function RequestWizard() {
   }
 
   const addressList: Address[] = addresses || [];
+  const outOfArea = useMemo(() => {
+    if (newLat == null || newLng == null) return false;
+    return haversineKm(newLat, newLng, cityCenter.lat, cityCenter.lng) > OUT_OF_AREA_WARN_KM;
+  }, [newLat, newLng, cityCenter]);
   const allMaterials = useMemo(() => (categories || []).flatMap((c) => c.materials), [categories]);
   const selectedIds = Object.keys(items).map(Number);
   const selectedMaterialObjs = allMaterials.filter((m) => selectedIds.includes(m.id));
@@ -115,9 +148,12 @@ export default function RequestWizard() {
 
   async function resolveAddressId(): Promise<number> {
     if (addressId) return addressId;
+    // باگ قبلی: شهر همیشه «یاسوج» ثبت می‌شد حتی برای کاربران شهرهای دیگر —
+    // حالا شهر واقعی کاربر ثبت می‌شود (و بک‌اند هم مستقل از این متن، فاصلهٔ
+    // مختصات تا مرکز شهر کاربر را اعتبارسنجی می‌کند).
     const created = await createAddress.mutateAsync({
-      title: newAddressTitle, full_address: newAddress, city: "یاسوج",
-      lat: String(newLat), lng: String(newLng), is_default: addressList.length === 0,
+      title: newAddressTitle, full_address: newAddress, city: activeCityName || "یاسوج",
+      lat: String(newLat ?? cityCenter.lat), lng: String(newLng ?? cityCenter.lng), is_default: addressList.length === 0,
     });
     return created.id;
   }
@@ -170,7 +206,7 @@ export default function RequestWizard() {
         </div>
       </div>
 
-      <div className="px-4 pb-32">
+      <div className="px-4 pb-32 md:pb-4">
         {step === 0 && (
           <div>
             {isLoading ? (
@@ -302,7 +338,12 @@ export default function RequestWizard() {
               </button>
             ) : (
               <Card className="p-3 flex flex-col gap-3">
-                <AddressMapPicker lat={newLat} lng={newLng} onChange={handleMapChange} />
+                <AddressMapPicker lat={newLat ?? cityCenter.lat} lng={newLng ?? cityCenter.lng} onChange={handleMapChange} />
+                {outOfArea && (
+                  <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
+                    این نقطه خارج از محدودهٔ شهر شما ({activeCityName || "یاسوج"}) به نظر می‌رسد — احتمالاً امکان ثبت این درخواست نیست. لطفاً نقطه‌ای داخل شهر خودتان انتخاب کنید.
+                  </p>
+                )}
                 <input
                   className="rounded-xl border border-brand-100 px-3 py-2.5 text-sm"
                   placeholder="عنوان آدرس"
@@ -510,8 +551,17 @@ export default function RequestWizard() {
         )}
       </div>
 
-      <div className="fixed bottom-20 inset-x-0 px-4">
-        <div className="max-w-md mx-auto flex gap-2">
+      {/*
+        فاز ۳/۴ (Stitch): این نوار روی موبایل دقیقاً مثل قبل fixed و بالای
+        BottomNav است. اما چون به‌صورت viewport-relative (inset-x-0 +
+        max-w-md mx-auto) بود، روی دسکتاپ — که دیگر BottomNav ندارد و ستون
+        محتوا کنار سایدبار جابه‌جا شده — این نوار وسط کل صفحه (نه وسط ستون
+        محتوا) می‌ایستاد و گاهی روی آخرین آیتم‌های دیده‌نشدهٔ لیست می‌افتاد.
+        از md به بالا به‌جای fixed، در جریان عادی صفحه (static) و هم‌عرض
+        همان ستون محتوا قرار می‌گیرد.
+      */}
+      <div className="fixed bottom-20 inset-x-0 px-4 md:static md:inset-auto md:px-0 md:pt-2">
+        <div className="max-w-md mx-auto md:max-w-none md:mx-0 flex gap-2">
           {step > 0 && (
             <Button variant="secondary" onClick={() => setStep((s) => s - 1)}>
               قبلی
