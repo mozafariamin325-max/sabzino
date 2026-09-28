@@ -43,6 +43,11 @@ const STORAGE_KEY = "sabzino_auth_v1";
 
 export const DEFAULT_CITY = "یاسوج";
 
+// فعلاً فقط یاسوج راه‌اندازی شده. هر شهر دیگری (مثلاً «شیراز» ذخیره‌شده از نسخهٔ قبلی روی گوشی
+// یا حساب قدیمی) به یاسوج برمی‌گردد. برای باز کردن شهر جدید فقط این فهرست را گسترش بده.
+export const LAUNCHED_CITIES: string[] = ["یاسوج"];
+export const resolveCity = (c?: string | null): string => (c && LAUNCHED_CITIES.includes(c) ? c : DEFAULT_CITY);
+
 // کاربر بدون حساب، از همان اولین اجرا «مهمان» است و مستقیم وارد اپ می‌شود؛
 // فقط برای ثبت نهایی درخواست/کیف‌پول ورود می‌خواهیم.
 const DEFAULTS = {
@@ -57,8 +62,7 @@ function loadInitial() {
     const parsed = JSON.parse(raw);
     const merged = { ...DEFAULTS, ...parsed };
     // اگر توکنی نیست، همیشه مهمان با یک شهر معتبر
-    if (!merged.accessToken) return { ...merged, isGuest: true, guestCity: merged.guestCity || DEFAULT_CITY };
-    return merged;
+    return { ...merged, guestCity: resolveCity(merged.guestCity), isGuest: merged.accessToken ? merged.isGuest : true };
   } catch {
     return DEFAULTS;
   }
@@ -92,7 +96,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     persist({ ...get(), activeView: view });
   },
   enterGuestMode: (city) => {
-    const next = { ...DEFAULTS, isGuest: true, guestCity: city };
+    const next = { ...DEFAULTS, isGuest: true, guestCity: resolveCity(city) };
     persist(next);
     set(next);
   },

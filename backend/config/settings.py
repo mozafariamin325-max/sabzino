@@ -206,6 +206,10 @@ LOGGING = {
 }
 
 # ---- SABZINO business config (Admin-tunable defaults; overridable via PlatformSetting model) ----
+# شهرهای راه‌اندازی‌شده. آدرس/درخواست هر کاربر با اولین شهر این فهرست سنجیده می‌شود، مگر شهر خودش در فهرست باشد
+# (کاربر قدیمی با شهر «شیراز» دیگر آدرس یاسوج را «خارج از محدوده» نمی‌بیند).
+LAUNCHED_CITIES = config("LAUNCHED_CITIES", default="یاسوج", cast=Csv())
+
 SABZINO_DEFAULT_COMMISSION_PERCENT = config("SABZINO_DEFAULT_COMMISSION_PERCENT", default=10, cast=float)
 SABZINO_DEFAULT_POINTS_PER_KG = config("SABZINO_DEFAULT_POINTS_PER_KG", default=2, cast=float)
 

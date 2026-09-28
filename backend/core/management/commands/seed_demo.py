@@ -789,6 +789,44 @@ class Command(BaseCommand):
         )
 
     # ---------------------------------------------------------------- green impact
+    def sync_yasuj_stations(self):
+        """ایستگاه‌های واقعی یاسوج (۳ نقطه در خیابان‌های اصلی) + غیرفعال‌کردن ایستگاه‌های نمونه.
+        مختصات از نقشه گرفته شده و تقریبی است؛ از پنل مدیریت/Django admin قابل اصلاح است."""
+        from locations.models import City
+        from stations.models import RecyclingStation
+
+        city = City.objects.filter(name="یاسوج").first()
+        if not city:
+            return
+        real = [
+            ("مرکز بازیافت سبزینو — خیابان جمهوری", "یاسوج، خیابان جمهوری (روبروی پمپ بنزین)", "30.6636", "51.6007"),
+            ("مرکز بازیافت سبزینو — بلوار عدل", "یاسوج، بلوار عدل", "30.6762", "51.5834"),
+            ("مرکز بازیافت سبزینو — شصت‌متری", "یاسوج، بلوار شصت‌متری امام خمینی", "30.6652", "51.5929"),
+        ]
+        names = [r[0] for r in real]
+        RecyclingStation.objects.exclude(name__in=names).update(is_active=False)
+        active_materials = list(Material.objects.filter(is_active=True))
+        for name, address, lat, lng in real:
+            st, _ = RecyclingStation.objects.get_or_create(
+                name=name, defaults={"address": address, "lat": Decimal(lat), "lng": Decimal(lng), "city": city},
+            )
+            st.address, st.city, st.is_active = address, city, True
+            if not st.lat or not st.lng:
+                st.lat, st.lng = Decimal(lat), Decimal(lng)
+            st.save()
+            st.accepted_materials.set(active_materials)
+
+    def cleanup_demo_data(self):
+        """داده نمونه را از دید کاربر واقعی برمی‌دارد (حذف نمی‌کند): جمع‌آورهای نمونه آفلاین،
+        کاربران نمونهٔ غیرمدیر غیرفعال، و شهر همهٔ کاربران به شهر راه‌اندازی‌شده."""
+        from django.conf import settings
+        from collectors.models import CollectorProfile
+
+        CollectorProfile.objects.filter(user__email__endswith="@sabzino.demo").update(is_online=False)
+        User.objects.filter(email__endswith="@sabzino.demo", is_staff=False, is_superuser=False).update(is_active=False)
+        launched = list(settings.LAUNCHED_CITIES) or ["یاسوج"]
+        User.objects.exclude(city__in=launched).update(city=launched[0])
+
     def seed_green_impact(self, city):
         """پروژه‌های اثر سبز (متن عادی، بدون برچسب نمونه؛ مبلغ جمع‌شده از صفر)."""
         from green_impact.models import ImpactProject

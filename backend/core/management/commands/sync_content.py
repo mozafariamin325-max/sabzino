@@ -17,6 +17,8 @@ class Command(BaseCommand):
         self.stdout.write("مواد و قیمت‌ها به‌روز شد.")
         seeder.sync_green_impact_content()
         self.stdout.write("پروژه‌های اثر سبز به‌روز شد.")
+        seeder.cleanup_demo_data()
+        self.stdout.write("داده نمونه از دید کاربر برداشته شد؛ شهر کاربران روی شهر راه‌اندازی‌شده تنظیم شد.")
         for hook in ("sync_yasuj_stations", "sync_challenges"):
             fn = getattr(seeder, hook, None)
             if fn:

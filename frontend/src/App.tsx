@@ -132,6 +132,9 @@ function RequireBusinessRole({ children }: { children: React.ReactNode }) {
  * دسکتاپ محو می‌شود؛ هیچ مسیر/منطقی تغییر نکرده، فقط پوستهٔ نمایش.
  */
 function AppLayout({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  const activeView = useAuthStore((s) => s.activeView);
+  const isAdminPage = pathname.startsWith("/admin") || (pathname === "/" && activeView === "ADMIN");
   return (
     <div className="min-h-dvh bg-surface">
       <header className="hidden md:flex fixed top-0 inset-x-0 z-30 h-16 items-center justify-between px-8 glass">
@@ -144,7 +147,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       <Sidebar />
 
       <div className="md:mr-64 md:pt-16">
-        <div className="max-w-md md:max-w-3xl mx-auto md:mx-0 md:px-10 md:py-8 pb-24 md:pb-8">
+        <div className={`max-w-md mx-auto md:mx-0 md:px-10 md:py-8 pb-24 md:pb-8 ${isAdminPage ? "md:max-w-6xl" : "md:max-w-3xl"}`}>
           <Suspense fallback={<CenterLoading />}>{children}</Suspense>
         </div>
       </div>

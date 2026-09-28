@@ -9,7 +9,7 @@ import { Button, Card, CenterLoading, TopBar } from "../components/ui";
 import { formatToman, toJalaliTime } from "../lib/format";
 import AddressMapPicker from "../components/AddressMapPicker";
 import RequestSuccessModal from "../components/RequestSuccessModal";
-import { useAuthStore } from "../store/auth";
+import { useAuthStore, resolveCity } from "../store/auth";
 import { clearDraft, loadDraft, saveDraft } from "../lib/wizardDraft";
 import { digitsOnly } from "../lib/digits";
 
@@ -68,7 +68,7 @@ export default function RequestWizard() {
   // همیشه یاسوج (باگ قبلی: کاربر شیراز هم نقشه را از یاسوج می‌دید). اگر
   // مختصات شهر کاربر در دیتابیس نبود، به یاسوج برمی‌گردیم تا نقشه هرگز
   // خالی/نامعتبر نماند.
-  const activeCityName = user?.city || guestCity || null;
+  const activeCityName = resolveCity(user?.city || guestCity);
   const cityCenter = useMemo(() => {
     if (activeCityName && allCities) {
       const match = allCities.find((c) => c.name === activeCityName);
@@ -82,6 +82,8 @@ export default function RequestWizard() {
   const [addingNewAddress, setAddingNewAddress] = useState(!!draft?.newAddress);
   const [newAddressTitle, setNewAddressTitle] = useState(draft?.newAddressTitle ?? "آدرس جدید");
   const [newAddress, setNewAddress] = useState(draft?.newAddress ?? "");
+  const [plate, setPlate] = useState(draft?.newPlate ?? "");
+  const [localError, setLocalError] = useState("");
   const [newLat, setNewLat] = useState<number | null>(draft?.newLat ?? null);
   const [newLng, setNewLng] = useState<number | null>(draft?.newLng ?? null);
 
@@ -140,7 +142,12 @@ export default function RequestWizard() {
         `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${la}&lon=${ln}&accept-language=fa&zoom=18`
       );
       const data = await res.json();
-      if (data?.display_name) setNewAddress(data.display_name);
+      // آدرس کوتاه و خوانا (بدون کد پستی/کشور): شهر، خیابان، محله. پلاک را خود کاربر می‌نویسد.
+      const a = data?.address || {};
+      const road = a.road || a.pedestrian || a.residential || "";
+      const area = a.neighbourhood || a.suburb || a.quarter || "";
+      const compact = ["یاسوج", road, area].filter(Boolean).join("، ");
+      if (road || area) setNewAddress(compact);
     } catch {
       /* reverse geocoding is a convenience only — citizen can always type the address manually */
     } finally {
@@ -193,7 +200,7 @@ export default function RequestWizard() {
 
   function canProceed() {
     if (step === 0) return selectedIds.length > 0 && selectedIds.every((id) => items[id].weightKg > 0);
-    if (step === 1) return !!addressId || (addingNewAddress && newAddress.trim().length > 5);
+    if (step === 1) return !!addressId || (addingNewAddress && newAddress.trim().length > 3 && plate.trim().length > 0);
     if (step === 2) {
       if (scheduleMode === "ONCE") return !!preferredTime;
       if (preferredHour === null) return false;
@@ -209,7 +216,8 @@ export default function RequestWizard() {
     // حالا شهر واقعی کاربر ثبت می‌شود (و بک‌اند هم مستقل از این متن، فاصلهٔ
     // مختصات تا مرکز شهر کاربر را اعتبارسنجی می‌کند).
     const created = await createAddress.mutateAsync({
-      title: newAddressTitle, full_address: newAddress, city: activeCityName || "یاسوج",
+      title: newAddressTitle, city: activeCityName || "یاسوج",
+      full_address: `${newAddress.trim()}، پلاک/واحد ${plate.trim()}`,
       lat: String(newLat ?? cityCenter.lat), lng: String(newLng ?? cityCenter.lng), is_default: addressList.length === 0,
     });
     return created.id;
@@ -226,12 +234,23 @@ export default function RequestWizard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, categories]);
 
+  // هر خطا (ساخت آدرس، ثبت درخواست، خارج از محدوده، قطع شبکه) به کاربر نشان داده می‌شود.
+  // قبلاً خطای ساخت آدرس هیچ‌جا نمایش داده نمی‌شد و دکمهٔ ثبت «کار نمی‌کرد».
   async function handleSubmit() {
+    setLocalError("");
+    try {
+      await submitCore();
+    } catch (e) {
+      setLocalError((e as Error)?.message || "ثبت درخواست انجام نشد. دوباره تلاش کن.");
+    }
+  }
+
+  async function submitCore() {
     // فاز ۱۹: مهمان همهٔ مراحل را پر کرده؛ فقط اینجا (ثبت نهایی) ورود می‌خواهیم.
     // پیش‌نویس ذخیره می‌شود و بعد از ورود، کاربر دقیقاً به همین مرحله برمی‌گردد.
     if (!accessToken) {
       saveDraft({
-        step: STEPS.length - 1, items, newAddressTitle, newAddress, newLat, newLng, scheduleMode,
+        step: STEPS.length - 1, items, newAddressTitle, newAddress, newPlate: plate, newLat, newLng, scheduleMode,
         preferredTime, frequency, dayOfWeek, dayOfMonth, preferredHour, description, greenIntent,
         autoSubmit: true,
       });
@@ -275,7 +294,7 @@ export default function RequestWizard() {
   }
 
   const busy = createRequest.isPending || createSchedule.isPending || createAddress.isPending;
-  const submitError = (createRequest.error || createSchedule.error) as Error | undefined;
+  const submitError = (localError ? new Error(localError) : createRequest.error || createSchedule.error || createAddress.error) as Error | undefined;
 
   return (
     <div>
@@ -465,6 +484,19 @@ export default function RequestWizard() {
                     value={newAddress}
                     onChange={(e) => setNewAddress(e.target.value)}
                   />
+                </div>
+                <div>
+                  <label className="text-[11px] text-ink-500 mb-1 block">پلاک / واحد / طبقه <span className="text-red-500">*</span></label>
+                  <input
+                    className="w-full rounded-xl border border-brand-100 p-3 text-sm"
+                    placeholder="مثلاً پلاک ۱۲، واحد ۳"
+                    value={plate}
+                    maxLength={60}
+                    onChange={(e) => setPlate(e.target.value)}
+                  />
+                  <p className="text-[10.5px] text-ink-400 mt-1.5 leading-5">
+                    برای پیدا شدن دقیق‌تر، پین را تا جای درِ منزل جابه‌جا کن. کد پستی لازم نیست.
+                  </p>
                 </div>
               </Card>
             )}

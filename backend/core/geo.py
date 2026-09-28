@@ -10,6 +10,14 @@ from math import radians, sin, cos, sqrt, atan2
 DEFAULT_SERVICE_RADIUS_KM = 30
 
 
+def service_city_name(user_city):
+    """شهر مبنای محدودهٔ سرویس: شهر کاربر اگر راه‌اندازی شده، وگرنه اولین شهر راه‌اندازی‌شده."""
+    from django.conf import settings
+
+    launched = list(settings.LAUNCHED_CITIES) or ["یاسوج"]
+    return user_city if user_city in launched else launched[0]
+
+
 def haversine_km(lat1, lng1, lat2, lng2):
     if None in (lat1, lng1, lat2, lng2):
         return None

@@ -12,6 +12,7 @@ export interface WizardDraft {
   items: Record<number, { weightKg: number; isExact: boolean }>;
   newAddressTitle: string;
   newAddress: string;
+  newPlate?: string;
   newLat: number | null;
   newLng: number | null;
   scheduleMode: "ONCE" | "RECURRING";

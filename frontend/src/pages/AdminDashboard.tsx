@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from "recharts";
@@ -18,13 +18,14 @@ import {
   useAdminStorePartners, useCreateStorePartner, useUpdateStorePartner, useAdminStoreRedemptions, useDecideStoreRedemption,
   useStations, useNearbyCollectorsMap,
 } from "../api/queries";
-import { Button, Card, CenterLoading, DemoBadge, EmptyState, TopBar } from "../components/ui";
+import { Button, Card, CenterLoading, EmptyState, TopBar } from "../components/ui";
 import { formatKg, formatNumber, formatToman, toJalali } from "../lib/format";
 import {
   IMPACT_CATEGORY_LABELS, type ImpactCategory, type ImpactProject, type AdminCollector, type AdminWithdrawal,
   type CollectionRequest, type StorePartnerCategory, type AdminStoreRedemption,
 } from "../api/types";
 import brandmark from "../assets/brand/brandmark-256.png";
+import AddressMapPicker from "../components/AddressMapPicker";
 
 const CHART_COLORS = { primary: "#16a34a", secondary: "#0ea5e9", danger: "#dc2626", muted: "#94a3b8" };
 
@@ -38,7 +39,36 @@ function jalaliDay(iso: string) {
 
 type Tab =
   | "overview" | "verification" | "charts" | "prices" | "missions" | "cities" | "b2b" | "impact" | "tools"
-  | "drivers" | "withdrawals" | "requests" | "store" | "map";
+  | "drivers" | "withdrawals" | "requests" | "store" | "map" | "stations";
+
+// منوی گروه‌بندی‌شده: به‌جای ۱۴ تب در یک نوار افقی، بخش‌ها بر اساس کار دسته‌بندی شده‌اند.
+const NAV_GROUPS: { title: string; items: { key: Tab; icon: string; label: string }[] }[] = [
+  { title: "عملیات روزانه", items: [
+    { key: "verification", icon: "✅", label: "تأیید ثبت‌نام‌ها" },
+    { key: "requests", icon: "📋", label: "درخواست‌های جمع‌آوری" },
+    { key: "map", icon: "🗺️", label: "نقشه زنده" },
+    { key: "drivers", icon: "🚚", label: "حساب رانندگان" },
+    { key: "stations", icon: "🏪", label: "مراکز بازیافت" },
+  ] },
+  { title: "مالی و فروشگاه", items: [
+    { key: "withdrawals", icon: "💳", label: "برداشت وجه" },
+    { key: "store", icon: "🛍️", label: "فروشگاه سبزینو" },
+    { key: "prices", icon: "🏷️", label: "قیمت‌ها" },
+  ] },
+  { title: "رشد و محتوا", items: [
+    { key: "impact", icon: "🌱", label: "اثر سبز" },
+    { key: "missions", icon: "🎯", label: "ماموریت‌ها و چالش‌ها" },
+    { key: "cities", icon: "🏙️", label: "شهرها" },
+    { key: "b2b", icon: "🏭", label: "بازار B2B" },
+  ] },
+  { title: "گزارش‌ها", items: [
+    { key: "charts", icon: "📈", label: "نمودارها" },
+    { key: "tools", icon: "🔎", label: "جستجو و خروجی" },
+  ] },
+];
+const TAB_LABEL: Record<string, string> = Object.fromEntries(
+  NAV_GROUPS.flatMap((g) => g.items.map((i) => [i.key, `${i.icon} ${i.label}`]))
+);
 
 export default function AdminDashboard() {
   const user = useAuthStore((s) => s.user);
@@ -124,41 +154,80 @@ export default function AdminDashboard() {
         },
       ];
 
-  return (
-    <div>
-      <TopBar
-        title={isStaff ? "داشبورد مدیریت سبزینو" : "داشبورد شهرداری یاسوج"}
-        right={<DemoBadge />}
-      />
+  const pending = data.pending_verifications || 0;
+  const badge = (key: Tab) => (key === "verification" && pending ? pending : 0);
 
+  function NavButton({ k, icon, label }: { k: Tab; icon: string; label: string }) {
+    const n = badge(k);
+    return (
+      <button
+        onClick={() => setTab(k)}
+        className={`w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-medium text-right transition ${
+          tab === k ? "bg-primary text-on-primary shadow-tinted-sm" : "text-ink-700 hover:bg-white"
+        }`}
+      >
+        <span className="text-base">{icon}</span>
+        <span className="flex-1">{label}</span>
+        {n > 0 && <span className="bg-amber-500 text-white text-[10px] rounded-full px-1.5 py-0.5">{formatNumber(n)}</span>}
+      </button>
+    );
+  }
+
+  const inSection = isStaff && tab !== "overview";
+
+  return (
+    <div className="md:flex md:gap-6 md:-mx-4">
+      {/* دسکتاپ: نوار کناری دائمی */}
       {isStaff && (
-        <div className="px-4 mb-3 -mx-1 overflow-x-auto">
-          <div className="flex gap-2 px-1 w-max">
-            {([
-              ["overview", "📊 نمای کلی"],
-              ["verification", `✅ تأیید ثبت‌نام‌ها${data.pending_verifications ? ` (${data.pending_verifications})` : ""}`],
-              ["requests", "📋 درخواست‌های جمع‌آوری"],
-              ["map", "🗺️ نقشه زنده"],
-              ["drivers", "🚚 حساب رانندگان"],
-              ["withdrawals", "💳 برداشت وجه"],
-              ["store", "🛍️ فروشگاه سبزینو"],
-              ["charts", "📈 نمودارها"],
-              ["prices", "🏷️ قیمت‌ها"],
-              ["missions", "🎯 ماموریت‌ها"],
-              ["cities", "🏙️ شهرها"],
-              ["b2b", "🏭 بازار B2B"],
-              ["impact", "🌱 اثر سبز"],
-              ["tools", "🔎 جستجو و خروجی"],
-            ] as const).map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`text-xs px-3 py-2 rounded-lg font-medium whitespace-nowrap ${tab === key ? "bg-brand-500 text-white" : "bg-white text-ink-600 border border-brand-100"}`}
-              >
-                {label}
-              </button>
+        <aside className="hidden md:block w-60 shrink-0">
+          <div className="sticky top-20 flex flex-col gap-4 rounded-2xl bg-white/70 p-3 max-h-[calc(100vh-6rem)] overflow-y-auto">
+            <NavButton k="overview" icon="📊" label="نمای کلی" />
+            {NAV_GROUPS.map((g) => (
+              <div key={g.title}>
+                <p className="text-[10.5px] text-ink-400 px-3 mb-1">{g.title}</p>
+                {g.items.map((i) => <NavButton key={i.key} k={i.key} icon={i.icon} label={i.label} />)}
+              </div>
             ))}
           </div>
+        </aside>
+      )}
+
+      <div className="flex-1 min-w-0">
+      {/* موبایل: در یک بخش، دکمهٔ بازگشت به منوی مدیریت */}
+      {inSection ? (
+        <div className="md:hidden flex items-center gap-2 px-4 pt-5 pb-3">
+          <button onClick={() => setTab("overview")} className="w-9 h-9 rounded-full bg-white shadow-tinted-sm text-ink-700" aria-label="بازگشت">›</button>
+          <h1 className="text-base font-bold text-ink-900">{TAB_LABEL[tab]}</h1>
+        </div>
+      ) : null}
+      <div className={inSection ? "hidden md:block" : ""}>
+        <TopBar title={isStaff ? (inSection ? TAB_LABEL[tab] : "داشبورد مدیریت سبزینو") : "داشبورد شهرداری یاسوج"} />
+      </div>
+
+      {/* موبایل: منوی بخش‌ها به‌صورت کاشی‌های گروه‌بندی‌شده (فقط در صفحهٔ اصلی مدیریت) */}
+      {isStaff && !inSection && (
+        <div className="md:hidden px-4 flex flex-col gap-4 mb-4">
+          {NAV_GROUPS.map((g) => (
+            <div key={g.title}>
+              <p className="text-xs font-bold text-ink-500 mb-2">{g.title}</p>
+              <div className="grid grid-cols-2 gap-2.5">
+                {g.items.map((i) => {
+                  const n = badge(i.key);
+                  return (
+                    <button
+                      key={i.key}
+                      onClick={() => setTab(i.key)}
+                      className="relative flex items-center gap-2.5 rounded-2xl bg-white shadow-tinted-sm px-3.5 py-3.5 text-right active:scale-[0.98] transition"
+                    >
+                      <span className="text-xl">{i.icon}</span>
+                      <span className="text-[13px] font-medium text-ink-800 leading-5">{i.label}</span>
+                      {n > 0 && <span className="absolute top-2 left-2 bg-amber-500 text-white text-[10px] rounded-full px-1.5 py-0.5">{formatNumber(n)}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -207,7 +276,127 @@ export default function AdminDashboard() {
         {isStaff && tab === "b2b" && <B2BTab />}
         {isStaff && tab === "impact" && <ImpactTab />}
         {isStaff && tab === "tools" && <ToolsTab />}
+        {isStaff && tab === "stations" && <StationsTab />}
       </div>
+      </div>
+    </div>
+  );
+}
+
+interface AdminStation {
+  uid: string; name: string; address: string; lat: string | null; lng: string | null;
+  working_hours: string; phone_number: string; is_active: boolean; city_name: string | null;
+}
+interface StationForm {
+  uid?: string; name: string; address: string; working_hours: string; phone_number: string; lat: number; lng: number;
+}
+const NEW_STATION: StationForm = {
+  name: "", address: "", working_hours: "۸ صبح تا ۸ شب", phone_number: "", lat: 30.6683, lng: 51.5877,
+};
+
+/** مدیریت مراکز بازیافت: افزودن با انتخاب نقطه روی نقشه، ویرایش، فعال/غیرفعال. */
+function StationsTab() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-stations"],
+    queryFn: async () => (await api.get<{ stations: AdminStation[] }>("/stations/", { params: { all: 1 } })).data.stations,
+  });
+  const save = useMutation({
+    mutationFn: async (p: { uid?: string; body: Record<string, unknown> }) =>
+      p.uid ? (await api.patch(`/stations/${p.uid}/`, p.body)).data : (await api.post("/stations/", p.body)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-stations"] });
+      qc.invalidateQueries({ queryKey: ["stations"] });
+    },
+  });
+  const [form, setForm] = useState<StationForm | null>(null);
+
+  async function submit() {
+    if (!form) return;
+    await save.mutateAsync({
+      uid: form.uid,
+      body: {
+        name: form.name.trim(), address: form.address.trim(), working_hours: form.working_hours.trim(),
+        phone_number: form.phone_number.trim(), lat: form.lat.toFixed(6), lng: form.lng.toFixed(6), city: "یاسوج",
+      },
+    });
+    setForm(null);
+  }
+
+  return (
+    <div className="flex flex-col gap-3 pb-6">
+      <Card className="p-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-ink-900">مراکز بازیافت</p>
+          <p className="text-[11px] text-ink-500 mt-0.5 leading-5">مراکز فعال روی نقشهٔ شهروندان نمایش داده می‌شوند.</p>
+        </div>
+        {!form && <Button onClick={() => setForm({ ...NEW_STATION })}>+ مرکز جدید</Button>}
+      </Card>
+
+      {form && (
+        <Card className="p-4 flex flex-col gap-3">
+          <p className="text-sm font-bold text-ink-900">{form.uid ? "ویرایش مرکز" : "مرکز جدید"}</p>
+          <input className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="نام مرکز"
+            value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <input className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="آدرس (مثلاً یاسوج، خیابان ...)"
+            value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+          <div className="grid grid-cols-2 gap-2">
+            <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="ساعت کاری"
+              value={form.working_hours} onChange={(e) => setForm({ ...form, working_hours: e.target.value })} />
+            <input className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm" dir="ltr" placeholder="تلفن" inputMode="tel"
+              value={form.phone_number} onChange={(e) => setForm({ ...form, phone_number: e.target.value.replace(/[^\d+]/g, "") })} />
+          </div>
+          <p className="text-[11px] text-ink-500">نقطهٔ دقیق را روی نقشه بزن یا پین را بکش:</p>
+          <AddressMapPicker lat={form.lat} lng={form.lng} height={240} onChange={(la, ln) => setForm({ ...form, lat: la, lng: ln })} />
+          <p className="text-[10.5px] text-ink-400" dir="ltr">{form.lat.toFixed(5)}, {form.lng.toFixed(5)}</p>
+          {save.error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{(save.error as Error).message}</p>}
+          <div className="flex gap-2">
+            <Button full loading={save.isPending} disabled={!form.name.trim() || !form.address.trim()} onClick={submit}>ذخیره</Button>
+            <Button variant="secondary" onClick={() => { setForm(null); save.reset(); }}>انصراف</Button>
+          </div>
+        </Card>
+      )}
+
+      {isLoading ? (
+        <CenterLoading />
+      ) : !data?.length ? (
+        <EmptyState icon="🏪" title="هنوز مرکزی ثبت نشده" />
+      ) : (
+        <div className="flex flex-col gap-2.5">
+          {data.map((st) => (
+            <Card key={st.uid} className={`p-4 ${st.is_active ? "" : "opacity-60"}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-ink-900">{st.name}</p>
+                  <p className="text-[11px] text-ink-500 mt-0.5">{st.address}</p>
+                  <p className="text-[10.5px] text-ink-400 mt-0.5" dir="ltr">{st.lat}, {st.lng}</p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${st.is_active ? "bg-green-100 text-green-700" : "bg-slate-100 text-ink-500"}`}>
+                  {st.is_active ? "فعال" : "غیرفعال"}
+                </span>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button
+                  className="text-[11px] px-3 py-1.5 rounded-lg border border-slate-200 text-ink-700"
+                  onClick={() => setForm({
+                    uid: st.uid, name: st.name, address: st.address, working_hours: st.working_hours,
+                    phone_number: st.phone_number, lat: Number(st.lat) || 30.6683, lng: Number(st.lng) || 51.5877,
+                  })}
+                >
+                  ویرایش
+                </button>
+                <button
+                  className={`text-[11px] px-3 py-1.5 rounded-lg ${st.is_active ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}
+                  disabled={save.isPending}
+                  onClick={() => save.mutate({ uid: st.uid, body: { is_active: !st.is_active } })}
+                >
+                  {st.is_active ? "غیرفعال‌کردن" : "فعال‌کردن"}
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

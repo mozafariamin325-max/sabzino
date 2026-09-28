@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import L from "leaflet";
 import { useStations, useNearbyCollectorsMap, useAllCities } from "../api/queries";
-import { useAuthStore } from "../store/auth";
+import { useAuthStore, resolveCity } from "../store/auth";
 import { Card, CenterLoading, TopBar } from "../components/ui";
 import "leaflet/dist/leaflet.css";
 
@@ -28,10 +28,10 @@ export default function Stations() {
   const user = useAuthStore((s) => s.user);
   // فاز ۱۵: در حالت مهمان شهر از انتخاب مهمان، و برای کاربر واقعی از شهر
   // پروفایلش می‌آید — نقشه و لیست فقط همین شهر را نشان می‌دهند.
-  const activeCityName = guestCity || user?.city || null;
+  const activeCityName = resolveCity(guestCity || user?.city);
 
-  const { data: stations, isLoading } = useStations(coords, guestCity);
-  const { data: collectors } = useNearbyCollectorsMap(coords, guestCity);
+  const { data: stations, isLoading } = useStations(coords, activeCityName);
+  const { data: collectors } = useNearbyCollectorsMap(coords, activeCityName);
   const { data: allCities } = useAllCities();
 
   useEffect(() => {
@@ -125,7 +125,7 @@ export default function Stations() {
                     <p className="text-xs text-ink-500 mt-1">{s.address}</p>
                     <p className="text-xs text-ink-500 mt-1">⏰ {s.working_hours}</p>
                   </div>
-                  {s.distance_km !== undefined && (
+                  {s.distance_km !== undefined && s.distance_km < 100 && (
                     <span className="text-xs bg-brand-50 text-brand-700 px-2 py-1 rounded-lg whitespace-nowrap">
                       {s.distance_km.toFixed(1)} کیلومتر
                     </span>

@@ -10,6 +10,18 @@ from .services import find_citizen, create_station_transaction
 class RecyclingStationViewSet(viewsets.ModelViewSet):
     queryset = RecyclingStation.objects.filter(is_active=True).prefetch_related("accepted_materials")
     serializer_class = RecyclingStationSerializer
+    lookup_field = "uid"
+
+    def get_queryset(self):
+        # مدیر با ?all=1 ایستگاه‌های غیرفعال را هم می‌بیند (برای فعال/غیرفعال‌کردن از داشبورد).
+        u = self.request.user
+        if u.is_authenticated and u.is_staff and (self.request.query_params.get("all") or self.request.method not in permissions.SAFE_METHODS):
+            return RecyclingStation.objects.all().prefetch_related("accepted_materials")
+        return super().get_queryset()
+
+    def perform_create(self, serializer):
+        station = serializer.save()
+        station.accepted_materials.set(Material.objects.filter(is_active=True))
 
     def get_permissions(self):
         return [permissions.AllowAny()] if self.request.method in permissions.SAFE_METHODS else [permissions.IsAdminUser()]
@@ -17,6 +29,7 @@ class RecyclingStationViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         lat, lng = request.query_params.get("lat"), request.query_params.get("lng")
         qs = self.filter_queryset(self.get_queryset())
+        admin_all = request.user.is_authenticated and request.user.is_staff and request.query_params.get("all")
 
         # فاز ۱۵: نقشهٔ هر کاربر فقط ایستگاه‌های همان شهر — برای کاربر واردشده
         # از شهر پروفایلش، برای مهمان از پارامتر ?city= (شهری که در همان لحظه
@@ -26,13 +39,14 @@ class RecyclingStationViewSet(viewsets.ModelViewSet):
         city_name = request.query_params.get("city")
         if not city_name and request.user.is_authenticated:
             city_name = request.user.city
-        if city_name:
+        if city_name and not admin_all:
             qs = qs.filter(city__name=city_name)
 
         stations = list(qs)
         if lat and lng:
             for s in stations:
-                s.distance_km = round(haversine_km(lat, lng, s.lat, s.lng), 2)
+                d = haversine_km(lat, lng, s.lat, s.lng) if s.lat is not None and s.lng is not None else None
+                s.distance_km = round(d, 2) if d is not None else 9999
             stations.sort(key=lambda s: s.distance_km)
         serializer = self.get_serializer(stations, many=True)
         return Response({"success": True, "stations": serializer.data})

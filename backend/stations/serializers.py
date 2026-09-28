@@ -1,5 +1,6 @@
 from decimal import Decimal
 from rest_framework import serializers
+from locations.models import City
 from materials.serializers import MaterialSerializer
 from .models import RecyclingStation, StationTransaction
 
@@ -8,11 +9,13 @@ class RecyclingStationSerializer(serializers.ModelSerializer):
     accepted_materials = MaterialSerializer(many=True, read_only=True)
     distance_km = serializers.FloatField(read_only=True, required=False)
     city_name = serializers.CharField(source="city.name", read_only=True, default=None)
+    # مدیر هنگام ساخت/ویرایش ایستگاه شهر را با نام می‌دهد (مثلاً «یاسوج»)
+    city = serializers.SlugRelatedField(slug_field="name", queryset=City.objects.all(), required=False, allow_null=True)
 
     class Meta:
         model = RecyclingStation
         fields = (
-            "uid", "name", "address", "city_name", "lat", "lng", "working_hours", "accepted_materials",
+            "uid", "name", "address", "city", "city_name", "lat", "lng", "working_hours", "accepted_materials",
             "capacity_kg_per_day", "phone_number", "image", "is_active", "distance_km",
         )
 

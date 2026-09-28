@@ -303,14 +303,15 @@ class AddressSerializer(serializers.ModelSerializer):
         lat, lng = attrs.get("lat"), attrs.get("lng")
         if request is not None and getattr(request.user, "is_authenticated", False) and lat is not None and lng is not None:
             from locations.models import City
-            from core.geo import out_of_service_area
+            from core.geo import out_of_service_area, service_city_name
 
-            city = City.objects.filter(name=request.user.city).first()
+            city_name = service_city_name(request.user.city)
+            city = City.objects.filter(name=city_name).first()
             is_out, distance_km = out_of_service_area(lat, lng, city)
             if is_out:
                 raise serializers.ValidationError({
                     "message": (
-                        f"این آدرس خارج از محدودهٔ سرویس‌دهی شهر شماست ({request.user.city}) — "
+                        f"این آدرس خارج از محدودهٔ سرویس‌دهی شهر شماست ({city_name}) — "
                         f"حدود {distance_km:.0f} کیلومتر با مرکز شهر فاصله دارد. لطفاً آدرسی داخل شهر خودتان وارد کنید."
                     )
                 })

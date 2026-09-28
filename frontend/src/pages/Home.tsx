@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useAuthStore } from "../store/auth";
+import { useAuthStore, resolveCity } from "../store/auth";
 import {
   useIdentityCities, useMyGreenImpact, useMyImpact, useMyRequests, useNotifications, usePricing, useWallet,
 } from "../api/queries";
@@ -68,7 +68,7 @@ export default function Home() {
   // داده نمی‌شود؛ فقط وقتی هیچ شهری اصلاً مشخص نیست (حساب‌های قدیمی بدون
   // شهر) به رفتار قبلی (اولین شهر دارای هویت) برمی‌گردیم.
   const guestCity = useAuthStore((s) => s.guestCity);
-  const activeCityName = user?.city || guestCity || null;
+  const activeCityName = resolveCity(user?.city || guestCity);
   const city =
     (identityCities || []).find((c) => c.name === activeCityName) ||
     (activeCityName ? null : (identityCities || [])[0]) ||

@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useAuthStore } from "../store/auth";
+import { useAuthStore, LAUNCHED_CITIES } from "../store/auth";
 import { Button, Card, TopBar } from "./ui";
 import { useState } from "react";
 import CityPicker from "./CityPicker";
@@ -34,7 +34,7 @@ export default function GuestProfile() {
             <p className="text-[11px] text-ink-500">شهر انتخاب‌شده</p>
             <p className="text-sm font-bold text-ink-900">{guestCity || "—"}</p>
           </div>
-          <button onClick={() => setChanging((v) => !v)} className="text-xs text-brand-600 font-medium">{changing ? "بستن" : "تغییر شهر"}</button>
+          {LAUNCHED_CITIES.length > 1 && <button onClick={() => setChanging((v) => !v)} className="text-xs text-brand-600 font-medium">{changing ? "بستن" : "تغییر شهر"}</button>}
         </Card>
         {changing && (
           <Card className="p-4">
