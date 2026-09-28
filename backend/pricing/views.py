@@ -10,7 +10,7 @@ class MaterialPriceViewSet(viewsets.ModelViewSet):
     action per spec section 18 — never hard-coded).
     """
 
-    queryset = MaterialPrice.objects.select_related("material").order_by("material__category__order", "material__name").all()
+    queryset = MaterialPrice.objects.select_related("material").filter(material__is_active=True).order_by("material__category__order", "material__name").all()
     serializer_class = MaterialPriceSerializer
     filterset_fields = ["material", "active"]
     # Full catalog is small (well under a thousand rows) and both the citizen

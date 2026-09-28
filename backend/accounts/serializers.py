@@ -12,9 +12,24 @@ from .models import (
 )
 
 
+_PERSIAN_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+
+def to_ascii_digits(value: str) -> str:
+    """ارقام فارسی/عربی را به انگلیسی تبدیل می‌کند و فاصله‌های دو سر را برمی‌دارد."""
+    return (value or "").translate(_PERSIAN_DIGITS).strip()
+
+
 def normalize_ir_phone(value: str) -> str:
-    """۰۹۱۲۰۰۰۱۰۰۱ / +989120001001 / 00989120001001 همه به شکل یکسان ۰۹XXXXXXXXX درمی‌آیند."""
-    digits = re.sub(r"\D", "", value or "")
+    """۰۹۱۲۰۰۰۱۰۰۱ / +989120001001 / 00989120001001 همه به شکل یکسان 09XXXXXXXXX درمی‌آیند.
+
+    سخت‌گیرانه: هر نویسه‌ای جز رقم (و + ابتدای شماره) باعث رد شدن می‌شود؛
+    قبلاً حروف بی‌صدا حذف می‌شدند و «09a12…» هم معتبر می‌شد.
+    """
+    raw = to_ascii_digits(value)
+    if not re.fullmatch(r"\+?\d+", raw):
+        return ""
+    digits = raw.lstrip("+")
     if digits.startswith("0098"):
         digits = digits[4:]
     elif digits.startswith("98"):
@@ -168,11 +183,12 @@ class LoginSerializer(serializers.Serializer):
         identifier = attrs["identifier"]
         password = attrs["password"]
         user_obj = User.objects.filter(email=identifier).first() or User.objects.filter(phone_number=identifier).first()
+        # پیام عمداً یکسان است تا مهاجم نتواند وجود یک ایمیل/شماره را حدس بزند.
         if not user_obj:
-            raise serializers.ValidationError("کاربری با این مشخصات یافت نشد.")
+            raise serializers.ValidationError("ایمیل/شماره یا رمز عبور اشتباه است.")
         user = authenticate(username=user_obj.username, password=password)
         if not user:
-            raise serializers.ValidationError("رمز عبور اشتباه است.")
+            raise serializers.ValidationError("ایمیل/شماره یا رمز عبور اشتباه است.")
         if user.is_suspended:
             raise serializers.ValidationError("حساب کاربری شما مسدود شده است.")
         attrs["user"] = user
@@ -209,11 +225,25 @@ class OTPCompleteProfileSerializer(serializers.Serializer):
     registration_token = serializers.CharField(write_only=True)
     first_name = serializers.CharField(max_length=150)
     last_name = serializers.CharField(max_length=150)
-    national_id = serializers.CharField(max_length=10)
-    city = serializers.CharField()
+    national_id = serializers.CharField(max_length=20)
+    city = serializers.CharField(required=False, default="یاسوج")
+
+    def validate_first_name(self, value):
+        value = value.strip()
+        if len(value) < 2:
+            raise serializers.ValidationError("نام را کامل وارد کن.")
+        return value
+
+    def validate_last_name(self, value):
+        value = value.strip()
+        if len(value) < 2:
+            raise serializers.ValidationError("نام خانوادگی را کامل وارد کن.")
+        return value
 
     def validate_national_id(self, value):
-        value = re.sub(r"\D", "", value or "")
+        value = to_ascii_digits(value)
+        if not re.fullmatch(r"\d{10}", value):
+            raise serializers.ValidationError("کد ملی باید دقیقاً ۱۰ رقم و فقط عدد باشد.")
         if not is_valid_iranian_national_id(value):
             raise serializers.ValidationError("کد ملی وارد شده معتبر نیست.")
         if User.objects.filter(national_id=value).exists():

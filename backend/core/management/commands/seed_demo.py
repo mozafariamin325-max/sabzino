@@ -33,6 +33,75 @@ LAST_NAMES = ["احمدی", "محمدی", "رضایی", "کریمی", "حسین�
 DISTRICTS_YASUJ = ["پاسوج", "بلوار آزادی", "شهرک والفجر", "خیابان طالقانی", "شهرک امام حسین", "بلوار دانشجو"]
 
 
+# ---------------------------------------------------------------------------
+# مدل قیمت‌گذاری خرید از شهروند (قابل تنظیم):
+# قیمت خرید سبزینو از شهروند = ۶۰٪ قیمت خرده‌بار بازار. ۴۰٪ باقی‌مانده تقریباً این‌طور
+# تقسیم می‌شود: هزینه/سود راننده ۱۸٪، سود سبزینو ۱۴٪، ذخیرهٔ مالیات و هزینهٔ عملیاتی ۸٪.
+# این‌ها تخمین‌اند، نه قرارداد؛ نرخ مالیات را با حسابدار خودتان تأیید کنید.
+# ---------------------------------------------------------------------------
+CITIZEN_SHARE = Decimal("0.60")
+
+
+def citizen_price_from_market(market_price):
+    """قیمت خرید از شهروند را از قیمت بازار می‌سازد و به یک عدد گرد نزدیک می‌کند."""
+    raw = Decimal(str(market_price)) * CITIZEN_SHARE
+    step = Decimal(50) if raw < 5000 else Decimal(100) if raw < 100000 else Decimal(1000)
+    return (raw / step).quantize(Decimal("1")) * step
+
+
+# مواد صنعتی/غیرخانگی که فعلاً از کاتالوگ عمومی کنار گذاشته می‌شوند (فقط پنهان؛ حذف نمی‌شوند).
+INDUSTRIAL_MATERIALS = [
+    # پلاستیک صنعتی و ساختمانی
+    "لوله پلی‌اتیلن درجه ۱", "لوله پلی‌اتیلن درجه ۲", "لوله سفید PP", "اتصالات PP", "لوله پلیکا",
+    "UPVC", "GPPS کریستال", "ABS", "HIPS", "سپر ماشین", "گونی و جامبو", "طلق", "لاک زنده بازیافت",
+    "سبد مرغی", "سبد مشکی", "سبد سبز", "سبد زرد", "سبد قرمز", "سبد آبی",
+    # کاغذ کارگاهی
+    "پوشال سفید", "پوشال رنگی", "پوشال صحافی", "پوشال لیوان کاغذی",
+    # فلز و شیشهٔ صنعتی/خودرو
+    "آهن سوپر ویژه", "چدن درشت‌بار", "مس آرمیچری", "مس ذوبی", "سرب نرم", "برنج زردبار", "شیشه خودرو",
+    # الکترونیک/قطعات
+    "دینام پوسته چدن", "دینام پوسته آلومینیوم", "کیلوبار داغونی",
+    # چوب/لاستیک
+    "پالت چوبی", "خاک‌اره", "لاستیک فرسوده خودرو",
+]
+
+
+def green_projects(city):
+    """پروژه‌های اثر سبز با متن عادی. مبلغ «جمع‌شده» عمداً صفر است — فقط مشارکت‌های واقعی جمع می‌شود."""
+    return [
+        {
+            "title": "توسعه فضای سبز شهری یاسوج", "category": "ENVIRONMENT", "icon": "🌱",
+            "summary": "کاشت و نگهداری نهال و فضای سبز در محله‌های یاسوج.",
+            "description": "اعتبار این طرح صرف تهیهٔ نهال، کاشت و نگهداری فضای سبز در پارک‌ها و حاشیهٔ خیابان‌های یاسوج می‌شود.",
+            "operator_name": "تیم سبزینو", "city": city, "goal_amount": Decimal("50000000"),
+        },
+        {
+            "title": "فرصت برابر برای کودکان", "category": "SOCIAL", "icon": "❤️",
+            "summary": "تهیهٔ لوازم‌التحریر برای کودکان خانواده‌های کم‌برخوردار.",
+            "description": "اعتبار این طرح صرف تهیهٔ لوازم‌التحریر و بستهٔ تحصیلی برای کودکان نیازمند شهر می‌شود.",
+            "operator_name": "تیم سبزینو", "city": city, "goal_amount": None,
+        },
+        {
+            "title": "اشتغال سبز", "category": "EMPLOYMENT", "icon": "🤝",
+            "summary": "آموزش و ایجاد فرصت درآمد در زنجیرهٔ جمع‌آوری و بازیافت.",
+            "description": "این طرح به آموزش تفکیک و بازیافت حرفه‌ای و معرفی افراد به شبکهٔ جمع‌آوری سبزینو کمک می‌کند؛ درآمد در ازای کار واقعی.",
+            "operator_name": "تیم سبزینو", "city": city, "goal_amount": None,
+        },
+        {
+            "title": "پاکسازی طبیعت دنا", "category": "ENVIRONMENT", "icon": "🏔️",
+            "summary": "پاکسازی مسیرهای طبیعت‌گردی و گردشگری منطقه از زباله.",
+            "description": "برگزاری دوره‌ای برنامه‌های پاکسازی طبیعت با مشارکت داوطلبان محلی و تأمین ابزار و پذیرایی آن‌ها.",
+            "operator_name": "تیم سبزینو", "city": city, "goal_amount": Decimal("15000000"),
+        },
+        {
+            "title": "توسعهٔ محلی محلهٔ پاسوج", "category": "LOCAL", "icon": "🏘️",
+            "summary": "نصب سطل تفکیک زباله و آموزش تفکیک از مبدأ در محله.",
+            "description": "خرید و نصب سطل‌های تفکیک زباله و آموزش ساکنان برای جداسازی پسماند خشک از تر.",
+            "operator_name": "تیم سبزینو", "city": city, "goal_amount": Decimal("8000000"),
+        },
+    ]
+
+
 class Command(BaseCommand):
     help = "Seeds demo data for the SABZINO Yasuj pilot"
 
@@ -217,7 +286,8 @@ class Command(BaseCommand):
                 changed.append("is_active")
             if changed:
                 mat.save(update_fields=changed)
-            cp, mp = Decimal(str(citizen_price)), Decimal(str(market_price))
+            mp = Decimal(str(market_price))
+            cp = citizen_price_from_market(mp)  # مدل ۶۰٪ (بالای فایل)
             price = mat.prices.filter(active=True).first()
             if price:
                 if price.price_per_unit != cp or price.market_price != mp:
@@ -365,6 +435,13 @@ class Command(BaseCommand):
             )
             if not mat.prices.filter(active=True).exists():
                 MaterialPrice.objects.create(material=mat, price_per_unit=Decimal(str(price)), active=True)
+
+        # ---- کاتالوگ خانگی/اداری: مواد صنعتی و «فقط کارشناسی» فعلاً از لیست عمومی کنار می‌روند ----
+        for n in INDUSTRIAL_MATERIALS:
+            deactivate(n)
+        Material.objects.filter(requires_appraisal=True).update(is_active=False)
+        Material.objects.filter(category__name__in=["لاستیک", "چوب"]).update(is_active=False)
+        Material.objects.filter(category__name="الکترونیک").exclude(name="کابل و سیم برق").update(is_active=False)
 
         return categories
 
@@ -713,58 +790,43 @@ class Command(BaseCommand):
 
     # ---------------------------------------------------------------- green impact
     def seed_green_impact(self, city):
-        """
-        Demo "اثر سبز" projects (spec: هدف/مبلغ موردنیاز/مجری/گزارش پیشرفت واقعی
-        هنوز وجود ندارد → داده نمونه، اما is_demo=True صریح تا در UI مشخص شود و
-        بعداً بدون تغییر ساختار از پنل مدیریت با پروژه واقعی جایگزین شود).
-        """
+        """پروژه‌های اثر سبز (متن عادی، بدون برچسب نمونه؛ مبلغ جمع‌شده از صفر)."""
         from green_impact.models import ImpactProject
 
-        projects = [
-            {
-                "title": "توسعه فضای سبز شهری یاسوج", "category": "ENVIRONMENT", "icon": "🌱",
-                "summary": "کمک به توسعه فضای سبز و کاهش اثرات زیست‌محیطی پسماند در یاسوج.",
-                "description": "این طرح با مشارکت شهرداری یاسوج، بخشی از اعتبار جمع‌آوری‌شده را صرف کاشت و نگهداری فضای سبز شهری می‌کند.",
-                "operator_name": "شهرداری یاسوج — معاونت خدمات شهری", "city": city,
-                "goal_amount": Decimal("50000000"), "raised_amount": Decimal("32500000"),
-            },
-            {
-                "title": "فرصت برابر برای کودکان", "category": "SOCIAL", "icon": "❤️",
-                "summary": "حمایت از یک برنامه اجتماعی معتبر برای کودکان و خانواده‌های کم‌برخوردار.",
-                "description": "اعتبار این طرح صرف تهیهٔ لوازم‌التحریر و کمک‌هزینهٔ تحصیلی برای کودکان کم‌برخوردار شهر می‌شود.",
-                "operator_name": "کمیتهٔ امداد امام خمینی (شعبهٔ یاسوج)", "city": city,
-                "goal_amount": None, "raised_amount": Decimal("24800000"),
-            },
-            {
-                "title": "اشتغال سبز", "category": "EMPLOYMENT", "icon": "🤝",
-                "summary": "کمک به آموزش و ایجاد فرصت درآمدی برای افراد کم‌برخوردار در زنجیرهٔ بازیافت.",
-                "description": "این طرح به آموزش تفکیک و بازیافت حرفه‌ای و معرفی افراد به شبکهٔ جمع‌آوری سبزینو کمک می‌کند — درآمد پایدار در ازای کار واقعی، نه کمک بلاعوض.",
-                "operator_name": "سبزینو × مرکز کاریابی یاسوج", "city": city,
-                "goal_amount": None, "raised_amount": Decimal("9400000"),
-            },
-            {
-                "title": "پاکسازی طبیعت دنا", "category": "ENVIRONMENT", "icon": "🏔️",
-                "summary": "پاکسازی مسیرهای گردشگری و طبیعت‌گردی کوه دنا از زباله.",
-                "description": "برگزاری دوره‌ای اردوهای پاکسازی طبیعت با مشارکت داوطلبان محلی، تأمین‌شده از محل اعتبار اثر سبز شهروندان.",
-                "operator_name": "انجمن دوستداران طبیعت دنا", "city": city,
-                "goal_amount": Decimal("15000000"), "raised_amount": Decimal("6200000"),
-            },
-            {
-                "title": "توسعهٔ محلی محلهٔ پاسوج", "category": "LOCAL", "icon": "🏘️",
-                "summary": "پروژه‌های کوچک محیط‌زیستی و اجتماعی در سطح محله.",
-                "description": "نصب سطل‌های تفکیک زباله و آموزش تفکیک از مبدأ برای ساکنان محلهٔ پاسوج.",
-                "operator_name": "شورایاری محلهٔ پاسوج", "city": city,
-                "goal_amount": Decimal("8000000"), "raised_amount": Decimal("1100000"),
-            },
-        ]
-        for i, p in enumerate(projects):
+        for i, p in enumerate(green_projects(city)):
             ImpactProject.objects.get_or_create(
                 title=p["title"],
                 defaults={
                     "category": p["category"], "icon": p["icon"], "summary": p["summary"],
                     "description": p["description"], "operator_name": p["operator_name"], "city": p["city"],
-                    "goal_amount": p["goal_amount"], "raised_amount": p["raised_amount"],
-                    "status": "ACTIVE", "is_demo": True, "order": i,
-                    "progress_report": "گزارش پیشرفت به‌زودی از پنل مدیریت سبزینو به‌روزرسانی می‌شود.",
+                    "goal_amount": p["goal_amount"], "raised_amount": Decimal("0"),
+                    "status": "ACTIVE", "is_demo": False, "order": i,
+                    "progress_report": "گزارش پیشرفت پس از شروع اجرای طرح در همین بخش منتشر می‌شود.",
                 },
             )
+
+    def sync_green_impact_content(self):
+        """روی دیتابیس واقعی: متن پروژه‌ها را به‌روز و برچسب نمونه را برمی‌دارد.
+        مبلغ جمع‌شده فقط وقتی صفر می‌شود که هیچ مشارکت واقعی برای آن ثبت نشده باشد."""
+        from green_impact.models import ImpactProject, ImpactContribution
+        from locations.models import City
+
+        city = City.objects.filter(name="یاسوج").first()
+        for i, p in enumerate(green_projects(city)):
+            obj, created = ImpactProject.objects.get_or_create(
+                title=p["title"],
+                defaults={
+                    "category": p["category"], "icon": p["icon"], "summary": p["summary"],
+                    "description": p["description"], "operator_name": p["operator_name"], "city": p["city"],
+                    "goal_amount": p["goal_amount"], "raised_amount": Decimal("0"),
+                    "status": "ACTIVE", "is_demo": False, "order": i,
+                    "progress_report": "گزارش پیشرفت پس از شروع اجرای طرح در همین بخش منتشر می‌شود.",
+                },
+            )
+            if created:
+                continue
+            obj.summary, obj.description, obj.operator_name = p["summary"], p["description"], p["operator_name"]
+            obj.is_demo = False
+            if not ImpactContribution.objects.filter(project=obj).exists():
+                obj.raised_amount = Decimal("0")
+            obj.save()

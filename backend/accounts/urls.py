@@ -1,10 +1,15 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     RegisterView, LoginView, MeView, AddressViewSet, ProfileChangeRequestViewSet,
     AdminProfileChangeRequestViewSet, OrganizationDetailView, AdminOrganizationViewSet,
     OTPRequestView, OTPVerifyView, OTPCompleteProfileView,
 )
+
+class ThrottledTokenRefreshView(TokenRefreshView):
+    throttle_scope = "refresh"
+
 
 router = DefaultRouter()
 router.register("addresses", AddressViewSet, basename="address")
@@ -17,6 +22,7 @@ urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path("me/", MeView.as_view(), name="me"),
     path("organization/", OrganizationDetailView.as_view(), name="organization-detail"),
+    path("token/refresh/", ThrottledTokenRefreshView.as_view(), name="token-refresh"),
     path("otp/request/", OTPRequestView.as_view(), name="otp-request"),
     path("otp/verify/", OTPVerifyView.as_view(), name="otp-verify"),
     path("otp/complete-profile/", OTPCompleteProfileView.as_view(), name="otp-complete-profile"),

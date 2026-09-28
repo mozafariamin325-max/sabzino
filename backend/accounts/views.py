@@ -31,6 +31,7 @@ class RegisterView(generics.CreateAPIView):
 
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
+    throttle_scope = "login"
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -44,6 +45,7 @@ class OTPRequestView(APIView):
     """فاز ۱۵: مرحلهٔ اول ورود با موبایل — ارسال کد (یا در OTP_TEST_MODE، کد تستی ثابت)."""
 
     permission_classes = [permissions.AllowAny]
+    throttle_scope = "otp_request"
 
     def post(self, request):
         serializer = OTPRequestSerializer(data=request.data)
@@ -72,6 +74,7 @@ class OTPVerifyView(APIView):
     """
 
     permission_classes = [permissions.AllowAny]
+    throttle_scope = "otp_verify"
 
     def post(self, request):
         serializer = OTPVerifySerializer(data=request.data)
@@ -105,6 +108,7 @@ class OTPCompleteProfileView(generics.CreateAPIView):
 
     serializer_class = OTPCompleteProfileSerializer
     permission_classes = [permissions.AllowAny]
+    throttle_scope = "otp_verify"
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

@@ -35,6 +35,14 @@ def request_otp(phone_number: str) -> OTPRequest:
     if recent and (timezone.now() - recent.created_at).total_seconds() < 30:
         raise ValueError("همین الان یک کد برایت ارسال شده — کمی صبر کن و دوباره تلاش کن.")
 
+    # سقف ساعتی به‌ازای هر شماره — جلوی بمباران پیامکی یک شمارهٔ قربانی را می‌گیرد
+    # (این شمارنده در دیتابیس است، پس بین پردازش‌های مختلف سرور هم معتبر است).
+    last_hour = OTPRequest.objects.filter(
+        phone_number=phone_number, created_at__gt=timezone.now() - timedelta(hours=1)
+    ).count()
+    if last_hour >= 6:
+        raise ValueError("تعداد درخواست کد برای این شماره زیاد بود — یک ساعت دیگر دوباره تلاش کن.")
+
     code = generate_otp_code()
     expires_at = timezone.now() + timedelta(minutes=settings.OTP_EXPIRY_MINUTES)
     otp = OTPRequest.objects.create(phone_number=phone_number, code=code, expires_at=expires_at)

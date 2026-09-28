@@ -10,6 +10,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config("SECRET_KEY", default="django-insecure-dev-key-change-in-production-sabzino")
 DEBUG = config("DEBUG", default=True, cast=bool)
+
+# هشدار امنیتی: با تنظیمات پیش‌فرض توسعه نباید روی سرور واقعی اجرا شد.
+import warnings as _warnings
+if SECRET_KEY.startswith("django-insecure"):
+    _warnings.warn("SECRET_KEY پیش‌فرض ناامن است — در سرور واقعی متغیر محیطی SECRET_KEY را تنظیم کنید.")
+if DEBUG:
+    _warnings.warn("DEBUG=True است — در سرور واقعی DEBUG=False بگذارید.")
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="*", cast=Csv())
 
 INSTALLED_APPS = [
@@ -133,13 +140,32 @@ REST_FRAMEWORK = {
         "rest_framework.filters.OrderingFilter",
     ),
     "EXCEPTION_HANDLER": "core.exceptions.standard_exception_handler",
+    # امنیت: محدودیت نرخ درخواست. کلیدهای scope به view‌های حساس (ورود/OTP) وصل‌اند.
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "120/min",
+        "user": "600/min",
+        # سقف IP عمداً سخاوتمندانه است: اپراتورهای موبایل ایران از NAT مشترک استفاده می‌کنند و
+        # ده‌ها کاربر واقعی یک IP دارند. محافظ اصلی، محدودیت «هر شماره» است (۳۰ ثانیه + ۶ در ساعت).
+        "otp_request": "40/min",
+        "otp_verify": "60/min",
+        "login": "20/min",
+        "refresh": "30/min",
+    },
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
+    # توکن دسترسی کوتاه‌عمر (اگر لو برود زود بی‌اعتبار می‌شود) + توکن تمدید بلند
+    # تا کاربر در اپ اندروید تا زمان «خروج» دستی وارد بماند. فرانت‌اند خودکار تمدید می‌کند.
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=6),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=180),
     "ROTATE_REFRESH_TOKENS": True,
+    "UPDATE_LAST_LOGIN": False,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
@@ -151,6 +177,12 @@ SPECTACULAR_SETTINGS = {
 
 CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL", default=True, cast=bool)
 CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())
+# فاز ۱۹: اپ اندروید (Capacitor) از https://localhost سرو می‌شود؛ حتی اگر
+# CORS_ALLOW_ALL روی سرور خاموش شود، این مبدأ همیشه مجاز می‌ماند.
+CORS_ALLOWED_ORIGINS = list(CORS_ALLOWED_ORIGINS)
+for _origin in ("https://localhost", "capacitor://localhost"):
+    if _origin not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(_origin)
 CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="", cast=Csv())
 
 # ---- Production hosting (Liara / Arvan / any PaaS behind a TLS-terminating proxy) ----
