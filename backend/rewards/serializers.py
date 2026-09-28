@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import GreenPointAccount, GreenPointTransaction, Badge, UserBadge, Challenge, ChallengeParticipation
+from .models import GreenPointAccount, GreenPointTransaction, Badge, UserBadge, Challenge, ChallengeParticipation, FieldEvent, FieldEventRegistration
 
 
 class GreenPointAccountSerializer(serializers.ModelSerializer):
@@ -46,3 +46,35 @@ class ChallengeSerializer(serializers.ModelSerializer):
         if not cp:
             return {"progress_value": 0, "completed": False}
         return {"progress_value": cp.progress_value, "completed": cp.completed}
+
+
+class FieldEventSerializer(serializers.ModelSerializer):
+    registered_count = serializers.SerializerMethodField()
+    spots_left = serializers.SerializerMethodField()
+    is_registered = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FieldEvent
+        fields = (
+            "uid", "title", "description", "location_name", "event_date", "capacity", "prize_text",
+            "lunch_included", "extra_info", "is_active", "registered_count", "spots_left", "is_registered",
+        )
+
+    def get_registered_count(self, obj):
+        return obj.registrations.count()
+
+    def get_spots_left(self, obj):
+        return max(obj.capacity - obj.registrations.count(), 0)
+
+    def get_is_registered(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return False
+        return obj.registrations.filter(user=user).exists()
+
+
+class FieldEventRegistrationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FieldEventRegistration
+        fields = ("full_name", "phone_number", "note", "created_at")
