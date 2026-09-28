@@ -4,11 +4,19 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
-export default defineConfig({
+// فاز ۱۹: در بیلد اندروید (`vite build --mode android`) service worker/PWA
+// لازم نیست — فایل‌ها داخل APK هستند و SW فقط کش کهنه ایجاد می‌کند.
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     tailwindcss(),
-    VitePWA({
+    {
+      name: 'android-viewport',
+      transformIndexHtml(html: string) {
+        return mode === 'android' ? html.replace(', viewport-fit=cover', '') : html
+      },
+    },
+    ...(mode === 'android' ? [] : [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
@@ -64,7 +72,7 @@ export default defineConfig({
         ],
       },
       devOptions: { enabled: true },
-    }),
+    })]),
   ],
   server: {
     host: true,
@@ -76,4 +84,4 @@ export default defineConfig({
   build: {
     outDir: 'build',
   },
-})
+}))

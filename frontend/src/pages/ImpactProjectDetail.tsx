@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { shareText } from "../lib/native";
 import { useNavigate, useParams } from "react-router-dom";
 import { useImpactProject, useMyGreenImpact } from "../api/queries";
 import { useAuthStore } from "../store/auth";
@@ -40,21 +41,7 @@ export default function ImpactProjectDetail() {
 
   async function handleShare() {
     const text = `${SHARE_PREFIX} — «${project!.title}»`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ text });
-        return;
-      } catch {
-        /* user cancelled */
-      }
-    }
-    if (navigator.clipboard) {
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch {
-        /* clipboard unavailable, ignore */
-      }
-    }
+    await shareText({ text });
   }
 
   return (

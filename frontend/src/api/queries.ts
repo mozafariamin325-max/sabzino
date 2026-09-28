@@ -97,7 +97,10 @@ export function useMe(enabled: boolean) {
 }
 
 export function useAddresses() {
+  // فاز ۱۹: مهمان (بدون توکن) آدرس ذخیره‌شده ندارد؛ بدون این گیت یک ۴۰۱ بی‌مورد می‌زد.
+  const accessToken = useAuthStore((s) => s.accessToken);
   return useQuery({
+    enabled: !!accessToken,
     queryKey: ["addresses"],
     queryFn: async () => {
       const { data } = await api.get<Address[] | Paginated<Address>>("/auth/addresses/");
@@ -634,7 +637,9 @@ export function useStorePartners(params?: { category?: string }) {
 }
 
 export function useMyStoreRedemptions() {
+  const accessToken = useAuthStore((s) => s.accessToken);
   return useQuery({
+    enabled: !!accessToken,
     queryKey: ["store-redemptions"],
     queryFn: async () => {
       const { data } = await api.get<Paginated<StoreRedemption> | StoreRedemption[]>("/store/redemptions/");

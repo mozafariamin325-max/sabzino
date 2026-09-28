@@ -67,7 +67,7 @@ export default function Profile() {
               className="flex items-center gap-1 text-xs text-red-600 font-medium"
               onClick={() => {
                 logout();
-                navigate("/login", { replace: true });
+                navigate("/", { replace: true });
               }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -224,6 +224,7 @@ export default function Profile() {
           <MenuLink to="/wallet" icon="👛" label="کیف پول" />
           <MenuLink to="/stations" icon="🏪" label="ایستگاه‌های بازیافت" />
           <MenuLink to="/leaderboard" icon="🏆" label="رتبه‌بندی شهروندان" />
+          <MenuLink to="/about" icon="ℹ️" label="دربارهٔ سبزینو" />
 
           {roles.includes("COLLECTOR") ? (
             <MenuLink to="/collector" icon="🚚" label="داشبورد جمع‌آور" />

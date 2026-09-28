@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   useAddresses, useCreateAddress, useCreateRequest, useCreateRecurringSchedule,
   useMaterialCategories, useAllCities,
@@ -9,6 +10,8 @@ import { formatToman, toJalaliTime } from "../lib/format";
 import AddressMapPicker from "../components/AddressMapPicker";
 import RequestSuccessModal from "../components/RequestSuccessModal";
 import { useAuthStore } from "../store/auth";
+import { clearDraft, loadDraft, saveDraft } from "../lib/wizardDraft";
+import { digitsOnly } from "../lib/digits";
 
 const STEPS = ["مواد و وزن", "آدرس", "زمان‌بندی", "توضیحات", "تأیید"];
 const YASUJ_CENTER = { lat: 30.6683, lng: 51.5877 };
@@ -37,12 +40,26 @@ const HOUR_RANGES = Array.from({ length: 22 - 6 }, (_, i) => 6 + i).map((h) => (
 
 type ItemState = { weightKg: number; isExact: boolean };
 
+const HOURS = Array.from({ length: 14 }, (_, i) => 8 + i); // ۸ تا ۲۱ (بازهٔ یک‌ساعته)
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const toLocalISO = (d: Date, h: number) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(h)}:00`;
+const faNum = (n: number) => n.toLocaleString("fa-IR");
+const dayLabel = (d: Date, i: number) =>
+  i === 0 ? "امروز" : i === 1 ? "فردا" : new Intl.DateTimeFormat("fa-IR-u-ca-persian", { weekday: "short", day: "numeric", month: "short" }).format(d);
+
 export default function RequestWizard() {
-  const [step, setStep] = useState(0);
+  const navigate = useNavigate();
+  // فاز ۱۹: پیش‌نویس ذخیره‌شدهٔ مهمان (اگر برای ورود از ویزارد خارج شده بود).
+  const [draft] = useState(() => loadDraft());
+  const [step, setStep] = useState(draft?.step ?? 0);
+  const [q, setQ] = useState("");
+  const [openCat, setOpenCat] = useState<number | null>(null);
   const { data: categories, isLoading } = useMaterialCategories();
   const { data: addresses } = useAddresses();
   const { data: allCities } = useAllCities();
   const user = useAuthStore((s) => s.user);
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const guestCity = useAuthStore((s) => s.guestCity);
   const createAddress = useCreateAddress();
   const createRequest = useCreateRequest();
   const createSchedule = useCreateRecurringSchedule();
@@ -51,7 +68,7 @@ export default function RequestWizard() {
   // همیشه یاسوج (باگ قبلی: کاربر شیراز هم نقشه را از یاسوج می‌دید). اگر
   // مختصات شهر کاربر در دیتابیس نبود، به یاسوج برمی‌گردیم تا نقشه هرگز
   // خالی/نامعتبر نماند.
-  const activeCityName = user?.city || null;
+  const activeCityName = user?.city || guestCity || null;
   const cityCenter = useMemo(() => {
     if (activeCityName && allCities) {
       const match = allCities.find((c) => c.name === activeCityName);
@@ -60,26 +77,55 @@ export default function RequestWizard() {
     return YASUJ_CENTER;
   }, [activeCityName, allCities]);
 
-  const [items, setItems] = useState<Record<number, ItemState>>({});
+  const [items, setItems] = useState<Record<number, ItemState>>(draft?.items ?? {});
   const [addressId, setAddressId] = useState<number | null>(null);
-  const [addingNewAddress, setAddingNewAddress] = useState(false);
-  const [newAddressTitle, setNewAddressTitle] = useState("آدرس جدید");
-  const [newAddress, setNewAddress] = useState("");
-  const [newLat, setNewLat] = useState<number | null>(null);
-  const [newLng, setNewLng] = useState<number | null>(null);
+  const [addingNewAddress, setAddingNewAddress] = useState(!!draft?.newAddress);
+  const [newAddressTitle, setNewAddressTitle] = useState(draft?.newAddressTitle ?? "آدرس جدید");
+  const [newAddress, setNewAddress] = useState(draft?.newAddress ?? "");
+  const [newLat, setNewLat] = useState<number | null>(draft?.newLat ?? null);
+  const [newLng, setNewLng] = useState<number | null>(draft?.newLng ?? null);
 
-  const [scheduleMode, setScheduleMode] = useState<"ONCE" | "RECURRING">("ONCE");
-  const [preferredTime, setPreferredTime] = useState("");
-  const [frequency, setFrequency] = useState<"WEEKLY" | "BIWEEKLY" | "MONTHLY">("WEEKLY");
-  const [dayOfWeek, setDayOfWeek] = useState(6);
-  const [dayOfMonth, setDayOfMonth] = useState(1);
+  const [scheduleMode, setScheduleMode] = useState<"ONCE" | "RECURRING">(draft?.scheduleMode ?? "ONCE");
+  const [preferredTime, setPreferredTime] = useState(draft?.preferredTime ?? "");
+  // فقط از حداقل دو ساعت بعد تا ۷ روز آینده، ساعت ۸ تا ۲۱ (نه گذشته، نه نیمه‌شب)
+  const days = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 8 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+      return d;
+    });
+  }, []);
+  const earliestMs = useMemo(() => Date.now() + 2 * 3600 * 1000, []);
+  const slotOk = (d: Date, h: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h).getTime() >= earliestMs;
+  const [pickDay, setPickDay] = useState<number | null>(() => {
+    const t = draft?.preferredTime;
+    if (!t) return null;
+    const i = days.findIndex((d) => toLocalISO(d, 0).slice(0, 10) === t.slice(0, 10));
+    return i >= 0 ? i : null;
+  });
+  const [pickHour, setPickHour] = useState<number | null>(() => {
+    const t = draft?.preferredTime;
+    const h = t ? Number(t.slice(11, 13)) : NaN;
+    return Number.isFinite(h) ? h : null;
+  });
+  useEffect(() => {
+    if (pickDay === null || pickHour === null || !slotOk(days[pickDay], pickHour)) {
+      setPreferredTime("");
+      return;
+    }
+    setPreferredTime(toLocalISO(days[pickDay], pickHour));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickDay, pickHour]);
+  const [frequency, setFrequency] = useState<"WEEKLY" | "BIWEEKLY" | "MONTHLY">(draft?.frequency ?? "WEEKLY");
+  const [dayOfWeek, setDayOfWeek] = useState(draft?.dayOfWeek ?? 6);
+  const [dayOfMonth, setDayOfMonth] = useState(draft?.dayOfMonth ?? 1);
   // فاز ۱۴: عمداً به‌جای مقدار پیش‌فرض، null است — شهروند باید خودش یک بازه
   // ساعتی را صراحتاً انتخاب کند تا بتوان ادامه داد (رفع ابهام «چه زمانی؟»).
-  const [preferredHour, setPreferredHour] = useState<number | null>(null);
+  const [preferredHour, setPreferredHour] = useState<number | null>(draft?.preferredHour ?? null);
 
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(draft?.description ?? "");
   const [photo, setPhoto] = useState<File | null>(null);
-  const [greenIntent, setGreenIntent] = useState<"SELL" | "DONATE">("SELL");
+  const [greenIntent, setGreenIntent] = useState<"SELL" | "DONATE">(draft?.greenIntent ?? "SELL");
   const [geocoding, setGeocoding] = useState(false);
   const [successInfo, setSuccessInfo] = useState<{
     estimatedValue: number; estimatedPoints: number; requestUid?: string; recurring: boolean;
@@ -107,6 +153,17 @@ export default function RequestWizard() {
     if (newLat == null || newLng == null) return false;
     return haversineKm(newLat, newLng, cityCenter.lat, cityCenter.lng) > OUT_OF_AREA_WARN_KM;
   }, [newLat, newLng, cityCenter]);
+  // جستجو: اگر عبارت با نام «گروه» بخواند همهٔ اعضای آن گروه، وگرنه فقط مواد مطابق نشان داده می‌شوند.
+  const filteredCats = useMemo(() => {
+    const term = q.trim();
+    return (categories || [])
+      .map((cat) => ({
+        ...cat,
+        materials: !term || cat.name.includes(term) ? cat.materials : cat.materials.filter((m) => m.name.includes(term)),
+      }))
+      .filter((cat) => cat.materials.length > 0);
+  }, [categories, q]);
+
   const allMaterials = useMemo(() => (categories || []).flatMap((c) => c.materials), [categories]);
   const selectedIds = Object.keys(items).map(Number);
   const selectedMaterialObjs = allMaterials.filter((m) => selectedIds.includes(m.id));
@@ -158,7 +215,29 @@ export default function RequestWizard() {
     return created.id;
   }
 
+  const autoRan = useRef(false);
+  useEffect(() => {
+    // مهمان «ثبت نهایی» را زده و ورود کرده؛ درخواست بدون هیچ کلیک دوباره ثبت می‌شود.
+    if (accessToken && draft?.autoSubmit && !autoRan.current && categories) {
+      autoRan.current = true;
+      saveDraft({ ...draft, autoSubmit: false }); // اگر ثبت شکست خورد، دفعهٔ بعد خودکار تکرار نشود
+      void handleSubmit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, categories]);
+
   async function handleSubmit() {
+    // فاز ۱۹: مهمان همهٔ مراحل را پر کرده؛ فقط اینجا (ثبت نهایی) ورود می‌خواهیم.
+    // پیش‌نویس ذخیره می‌شود و بعد از ورود، کاربر دقیقاً به همین مرحله برمی‌گردد.
+    if (!accessToken) {
+      saveDraft({
+        step: STEPS.length - 1, items, newAddressTitle, newAddress, newLat, newLng, scheduleMode,
+        preferredTime, frequency, dayOfWeek, dayOfMonth, preferredHour, description, greenIntent,
+        autoSubmit: true,
+      });
+      navigate("/login", { state: { from: { pathname: "/requests/new" } } });
+      return;
+    }
     const finalAddressId = await resolveAddressId();
 
     if (scheduleMode === "RECURRING") {
@@ -172,6 +251,7 @@ export default function RequestWizard() {
       });
       // فاز ۱۴: به‌جای رفتن بی‌صدا به لیست درخواست‌ها، صفحهٔ موفقیت نشان
       // داده می‌شود؛ دکمه‌های همان صفحه کاربر را به خانه/لیست هدایت می‌کنند.
+      clearDraft();
       setSuccessInfo({ estimatedValue, estimatedPoints: 0, recurring: true });
       return;
     }
@@ -188,6 +268,7 @@ export default function RequestWizard() {
     if (photo) fd.append("photo", photo);
 
     const res = await createRequest.mutateAsync(fd);
+    clearDraft();
     setSuccessInfo({
       estimatedValue, estimatedPoints: res.estimated_points ?? 0, requestUid: res.request.uid, recurring: false,
     });
@@ -206,20 +287,40 @@ export default function RequestWizard() {
         </div>
       </div>
 
-      <div className="px-4 pb-32 md:pb-4">
+      <div className="px-4 pb-4">
         {step === 0 && (
           <div>
             {isLoading ? (
               <CenterLoading />
             ) : (
               <div className="flex flex-col gap-4">
-                <p className="text-xs text-ink-500">می‌توانید چند نوع زباله را هم‌زمان انتخاب کنید و برای هرکدام وزن را با اهرم تنظیم کنید یا دقیق وارد کنید.</p>
-                {(categories || []).map((cat) => (
-                  <div key={cat.id}>
-                    <p className="text-sm font-bold text-ink-800 mb-2">
-                      {cat.icon} {cat.name}
-                    </p>
-                    <div className="flex flex-col gap-2">
+                <input
+                  type="search"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="🔍 جستجوی نوع زباله (مثلاً پلاستیک، کارتن، مس)"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+                <p className="text-xs text-ink-500">گروه را باز کن، چند نوع زباله را هم‌زمان انتخاب کن و برای هرکدام وزن را تنظیم کن.</p>
+                {filteredCats.length === 0 && <p className="text-sm text-ink-500 text-center py-6">موردی پیدا نشد.</p>}
+                {filteredCats.map((cat) => {
+                  const isOpen = !!q.trim() || openCat === cat.id;
+                  const selCount = cat.materials.filter((m) => !!items[m.id]).length;
+                  return (
+                  <div key={cat.id} className="rounded-2xl bg-white border border-slate-200 overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setOpenCat(openCat === cat.id ? null : cat.id)}
+                      className="w-full flex items-center justify-between px-4 py-3.5 text-right"
+                    >
+                      <span className="text-sm font-bold text-ink-800">{cat.icon} {cat.name}</span>
+                      <span className="flex items-center gap-2 text-xs text-ink-500">
+                        {selCount > 0 && <span className="bg-primary text-on-primary rounded-full px-2 py-0.5">{faNum(selCount)}</span>}
+                        <span>{isOpen ? "▴" : "▾"}</span>
+                      </span>
+                    </button>
+                    {isOpen && (
+                    <div className="flex flex-col gap-2 p-3 pt-0">
                       {cat.materials.map((m) => {
                         const selected = !!items[m.id];
                         return (
@@ -261,19 +362,19 @@ export default function RequestWizard() {
                                 {items[m.id].isExact ? (
                                   <div>
                                     <input
-                                      type="number"
+                                      type="text"
                                       inputMode="numeric"
-                                      min={1}
-                                      max={MAX_WEIGHT_KG}
-                                      step={1}
+                                      autoComplete="off"
+                                      placeholder="وزن (کیلوگرم)"
                                       className="w-full rounded-lg border border-brand-200 px-3 py-2 text-sm"
-                                      value={items[m.id].weightKg}
+                                      dir="ltr"
+                                      value={items[m.id].weightKg > 0 ? String(items[m.id].weightKg) : ""}
                                       onChange={(e) => {
-                                        // فقط عدد صحیح — اعشار و هر کاراکتر غیرعددی (حروف فارسی/انگلیسی) رد می‌شود
-                                        const parsed = Math.round(Number(e.target.value));
-                                        const clamped = Number.isFinite(parsed) ? Math.min(MAX_WEIGHT_KG, Math.max(1, parsed)) : 1;
-                                        updateItem(m.id, { weightKg: clamped });
+                                        // فقط رقم؛ خالی‌کردن و تایپ دوباره آزاد است (قبلاً عدد قفل می‌شد).
+                                        const d = digitsOnly(e.target.value, 3);
+                                        updateItem(m.id, { weightKg: d === "" ? 0 : Math.min(MAX_WEIGHT_KG, parseInt(d, 10)) });
                                       }}
+                                      onBlur={() => { if (!(items[m.id].weightKg > 0)) updateItem(m.id, { weightKg: 1 }); }}
                                     />
                                     <p className="text-[10px] text-ink-400 mt-1">
                                       وزن به کیلوگرم و به‌صورت عدد صحیح (بدون اعشار) — اگر بیشتر از {MAX_WEIGHT_KG} کیلوگرم دارید، همین‌جا وارد کنید، جمع‌آور در محل هماهنگ می‌کند.
@@ -301,8 +402,10 @@ export default function RequestWizard() {
                         );
                       })}
                     </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -387,20 +490,46 @@ export default function RequestWizard() {
 
             {scheduleMode === "ONCE" ? (
               <div>
-                <label className="text-xs text-ink-500 mb-1 block">تاریخ و ساعت مراجعه <span className="text-red-500">*</span></label>
-                <input
-                  type="datetime-local"
-                  required
-                  className="w-full rounded-xl border border-brand-100 p-3 text-sm"
-                  value={preferredTime}
-                  onChange={(e) => setPreferredTime(e.target.value)}
-                />
+                <label className="text-xs text-ink-500 mb-2 block">روز مراجعه <span className="text-red-500">*</span></label>
+                <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+                  {days.map((d, i) => {
+                    const anyHour = HOURS.some((h) => slotOk(d, h));
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        disabled={!anyHour}
+                        onClick={() => { setPickDay(i); if (pickHour !== null && !slotOk(d, pickHour)) setPickHour(null); }}
+                        className={`shrink-0 rounded-2xl border px-3.5 py-2.5 text-xs ${pickDay === i ? "border-primary bg-primary text-on-primary" : "border-slate-200 bg-white text-ink-700"} disabled:opacity-40`}
+                      >
+                        {dayLabel(d, i)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <label className="text-xs text-ink-500 mt-3 mb-2 block">ساعت مراجعه <span className="text-red-500">*</span></label>
+                <div className="grid grid-cols-4 gap-2">
+                  {HOURS.map((h) => {
+                    const ok = pickDay !== null && slotOk(days[pickDay], h);
+                    return (
+                      <button
+                        key={h}
+                        type="button"
+                        disabled={!ok}
+                        onClick={() => setPickHour(h)}
+                        className={`rounded-xl border py-2 text-xs ${pickHour === h && ok ? "border-primary bg-primary text-on-primary" : "border-slate-200 bg-white text-ink-700"} disabled:opacity-35`}
+                      >
+                        {faNum(h)} تا {faNum(h + 1)}
+                      </button>
+                    );
+                  })}
+                </div>
                 {preferredTime ? (
-                  <p className="text-[11px] text-brand-700 bg-brand-50 rounded-lg px-2.5 py-1.5 mt-1.5 inline-block">
+                  <p className="text-[11px] text-brand-700 bg-brand-50 rounded-lg px-2.5 py-1.5 mt-3 inline-block">
                     📅 {toJalaliTime(preferredTime)}
                   </p>
                 ) : (
-                  <p className="text-[11px] text-ink-500 mt-1.5">برای ادامه، تاریخ و ساعت مراجعه را انتخاب کنید.</p>
+                  <p className="text-[11px] text-ink-500 mt-3">روز و ساعت را انتخاب کن (حداقل ۲ ساعت بعد، تا ۷ روز آینده، ۸ صبح تا ۹ شب).</p>
                 )}
               </div>
             ) : (
@@ -560,7 +689,7 @@ export default function RequestWizard() {
         از md به بالا به‌جای fixed، در جریان عادی صفحه (static) و هم‌عرض
         همان ستون محتوا قرار می‌گیرد.
       */}
-      <div className="fixed bottom-20 inset-x-0 px-4 md:static md:inset-auto md:px-0 md:pt-2">
+      <div className="sticky bottom-[68px] z-30 px-4 py-2.5 bg-surface/95 md:static md:px-0 md:pt-2 md:bg-transparent">
         <div className="max-w-md mx-auto md:max-w-none md:mx-0 flex gap-2">
           {step > 0 && (
             <Button variant="secondary" onClick={() => setStep((s) => s - 1)}>
@@ -573,7 +702,7 @@ export default function RequestWizard() {
             </Button>
           ) : (
             <Button full loading={busy} onClick={handleSubmit}>
-              ثبت نهایی درخواست
+              {accessToken ? "ثبت نهایی درخواست" : "ورود و ثبت نهایی درخواست"}
             </Button>
           )}
         </div>

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuthStore } from "../store/auth";
 import { useMyStoreRedemptions, useRequestStoreRedemption, useStorePartners, useWallet } from "../api/queries";
 import { Button, Card, CenterLoading, EmptyState, TopBar } from "../components/ui";
 import { formatToman, toJalaliTime } from "../lib/format";
@@ -87,6 +89,10 @@ function RedeemModal({ partner, balance, onClose }: { partner: StorePartner; bal
 }
 
 export default function Store() {
+  // فاز ۱۹: مهمان فروشگاه را آزادانه مرور می‌کند؛ فقط خرید (خرج کیف‌پول) ورود می‌خواهد.
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const navigate = useNavigate();
+  const location = useLocation();
   const { data: wallet } = useWallet();
   const [category, setCategory] = useState<string>("");
   const { data: partners, isLoading } = useStorePartners(category ? { category } : undefined);
@@ -102,16 +108,33 @@ export default function Store() {
 
       <div className="px-4">
         <div className="rounded-3xl bg-gradient-to-l from-brand-600 to-brand-500 p-5 text-white shadow-lg flex items-center justify-between">
-          <div>
-            <p className="text-xs text-brand-50/90">موجودی قابل استفاده</p>
-            <p className="text-xl font-extrabold mt-1">{formatToman(balance)} تومان</p>
-          </div>
-          <button
-            onClick={() => setShowHistory((s) => !s)}
-            className="bg-white text-brand-700 text-xs font-medium px-3.5 py-2 rounded-xl"
-          >
-            خریدهای من
-          </button>
+          {accessToken ? (
+            <>
+              <div>
+                <p className="text-xs text-brand-50/90">موجودی قابل استفاده</p>
+                <p className="text-xl font-extrabold mt-1">{formatToman(balance)} تومان</p>
+              </div>
+              <button
+                onClick={() => setShowHistory((s) => !s)}
+                className="bg-white text-brand-700 text-xs font-medium px-3.5 py-2 rounded-xl"
+              >
+                خریدهای من
+              </button>
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="text-sm font-bold">با زباله‌ات خرید کن</p>
+                <p className="text-[11px] text-brand-50/90 mt-1 leading-5">فروشگاه‌ها را ببین؛ برای خرید با کیف‌پول وارد شو.</p>
+              </div>
+              <button
+                onClick={() => navigate("/login", { state: { from: location } })}
+                className="bg-white text-brand-700 text-xs font-medium px-3.5 py-2 rounded-xl shrink-0"
+              >
+                ورود
+              </button>
+            </>
+          )}
         </div>
 
         {showHistory && (
@@ -166,7 +189,7 @@ export default function Store() {
           ) : (
             <div className="grid grid-cols-2 gap-3 pb-6">
               {partners.map((p) => (
-                <button key={p.uid} type="button" onClick={() => setSelected(p)} className="text-right">
+                <button key={p.uid} type="button" onClick={() => (accessToken ? setSelected(p) : navigate("/login", { state: { from: location } }))} className="text-right">
                   <Card className="p-3.5 h-full flex flex-col">
                     <div className="w-11 h-11 rounded-xl bg-brand-50 flex items-center justify-center text-xl overflow-hidden mb-2">
                       {p.logo ? <img src={p.logo} alt={p.name} className="w-full h-full object-cover" /> : CATEGORY_ICONS[p.category]}

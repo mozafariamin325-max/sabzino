@@ -61,7 +61,7 @@ const items: NavItem[] = [
 
 export default function BottomNav() {
   return (
-    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 glass shadow-[0_-1px_8px_rgba(0,45,28,0.06)] pb-[env(safe-area-inset-bottom)]">
+    <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-slate-200 shadow-[0_-4px_16px_rgba(0,45,28,0.08)] pb-[env(safe-area-inset-bottom)]">
       <div className="max-w-md mx-auto grid grid-cols-5">
         {items.map((item) => (
           <NavLink

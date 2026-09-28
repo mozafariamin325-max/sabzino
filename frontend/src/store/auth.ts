@@ -31,6 +31,8 @@ interface AuthState {
   guestCity: string | null;
   setAuth: (tokens: { access: string; refresh: string }, user: SabzinoUser) => void;
   setUser: (user: SabzinoUser) => void;
+  /** تمدید خودکار توکن (بدون تغییر کاربر) */
+  setTokens: (access: string, refresh: string) => void;
   setActiveView: (view: string) => void;
   enterGuestMode: (city: string) => void;
   logout: () => void;
@@ -39,9 +41,13 @@ interface AuthState {
 
 const STORAGE_KEY = "sabzino_auth_v1";
 
+export const DEFAULT_CITY = "یاسوج";
+
+// کاربر بدون حساب، از همان اولین اجرا «مهمان» است و مستقیم وارد اپ می‌شود؛
+// فقط برای ثبت نهایی درخواست/کیف‌پول ورود می‌خواهیم.
 const DEFAULTS = {
   accessToken: null, refreshToken: null, user: null, activeView: "CITIZEN",
-  isGuest: false, guestCity: null,
+  isGuest: true, guestCity: DEFAULT_CITY as string | null,
 };
 
 function loadInitial() {
@@ -49,7 +55,10 @@ function loadInitial() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULTS;
     const parsed = JSON.parse(raw);
-    return { ...DEFAULTS, ...parsed };
+    const merged = { ...DEFAULTS, ...parsed };
+    // اگر توکنی نیست، همیشه مهمان با یک شهر معتبر
+    if (!merged.accessToken) return { ...merged, isGuest: true, guestCity: merged.guestCity || DEFAULT_CITY };
+    return merged;
   } catch {
     return DEFAULTS;
   }
@@ -74,6 +83,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user });
     persist({ ...get(), user });
   },
+  setTokens: (access, refresh) => {
+    set({ accessToken: access, refreshToken: refresh });
+    persist({ ...get(), accessToken: access, refreshToken: refresh });
+  },
   setActiveView: (view) => {
     set({ activeView: view });
     persist({ ...get(), activeView: view });
@@ -87,7 +100,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // isGuest/guestCity عمداً دست‌نخورده می‌ماند: «خروج» یعنی پایان یک نشست
     // واقعی (یا انقضای توکن)، نه لزوماً خروج از حالت مرور مهمان — یک درخواست
     // ۴۰۱ ناخواسته در حالت مهمان نباید کاربر را وسط مرور بیرون بیندازد.
-    const next = { ...DEFAULTS, isGuest: get().isGuest, guestCity: get().guestCity };
+    // بعد از خروج، کاربر دوباره مهمان می‌شود (شهر قبلی‌اش حفظ می‌شود).
+    const next = { ...DEFAULTS, isGuest: true, guestCity: get().guestCity || get().user?.city || DEFAULT_CITY };
     persist(next);
     set(next);
   },

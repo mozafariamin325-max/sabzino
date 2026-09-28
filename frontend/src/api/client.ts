@@ -35,15 +35,48 @@ function extractErrorMessage(data: unknown): string | undefined {
   return undefined;
 }
 
+// ---- تمدید خودکار توکن ----
+// قبلاً هر پاسخ ۴۰۱ مستقیم کاربر را از حساب بیرون می‌انداخت و توکن refresh اصلاً
+// استفاده نمی‌شد. حالا: ۴۰۱ → یک بار تمدید (single-flight) → تکرار درخواست.
+// فقط اگر خودِ سرور توکن refresh را رد کند (نه قطعی اینترنت) خروج انجام می‌شود.
+let refreshing: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const { refreshToken, setTokens, logout } = useAuthStore.getState();
+  if (!refreshToken) return null;
+  try {
+    const res = await axios.post(`${API_BASE_URL}/api/v1/auth/token/refresh/`, { refresh: refreshToken });
+    const access = res.data?.access as string | undefined;
+    if (!access) return null;
+    setTokens(access, (res.data?.refresh as string | undefined) || refreshToken);
+    return access;
+  } catch (e) {
+    const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+    if (status === 401 || status === 400 || status === 403) logout(); // توکن واقعاً باطل شده
+    return null; // قطعی شبکه/خطای سرور: نشست حفظ می‌شود
+  }
+}
+
 api.interceptors.response.use(
   (res) => res,
-  (error) => {
-    if (error?.response?.status === 401) {
-      useAuthStore.getState().logout();
+  async (error) => {
+    const original = error?.config as (typeof error.config & { _retried?: boolean }) | undefined;
+    const status = error?.response?.status;
+    if (status === 401 && original && !original._retried && useAuthStore.getState().refreshToken) {
+      original._retried = true;
+      refreshing = refreshing ?? refreshAccessToken().finally(() => { refreshing = null; });
+      const newAccess = await refreshing;
+      if (newAccess) {
+        original.headers = original.headers ?? {};
+        original.headers.Authorization = `Bearer ${newAccess}`;
+        return api(original);
+      }
     }
     const message =
       extractErrorMessage(error?.response?.data) ||
-      "خطا در ارتباط با سرور. اتصال اینترنت خود را بررسی کنید.";
+      (status === undefined
+        ? "ارتباط با سرور برقرار نشد. اینترنت خود را بررسی کنید."
+        : "خطایی رخ داد. لطفاً دوباره تلاش کنید.");
     return Promise.reject(new Error(message));
   }
 );

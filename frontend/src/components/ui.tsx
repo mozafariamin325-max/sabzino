@@ -88,12 +88,9 @@ export function EmptyState({ icon = "🌱", title, subtitle }: { icon?: string; 
   );
 }
 
-export function DemoBadge({ className = "" }: { className?: string }) {
-  return (
-    <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 ${className}`}>
-      داده نمونه
-    </span>
-  );
+/** نشان «داده نمونه» — اپ اکنون واقعی است و دیگر چیزی نشان نمی‌دهد (برای سازگاری با فراخوانی‌های قبلی نگه داشته شد). */
+export function DemoBadge(_props: { className?: string }) {
+  return null;
 }
 
 export function StatusPill({ status, label }: { status: string; label: string }) {

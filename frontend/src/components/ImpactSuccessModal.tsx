@@ -1,4 +1,5 @@
 import { IMPACT_CATEGORY_LABELS, type ImpactContribution } from "../api/types";
+import { shareText } from "../lib/native";
 import { formatToman } from "../lib/format";
 import { Button } from "./ui";
 
@@ -23,21 +24,7 @@ export default function ImpactSuccessModal({
   const single = contributions.length === 1 ? contributions[0] : null;
 
   async function handleShare() {
-    if (navigator.share) {
-      try {
-        await navigator.share({ text: SHARE_TEXT });
-        return;
-      } catch {
-        // user cancelled — fall through to clipboard as a no-op
-      }
-    }
-    if (navigator.clipboard) {
-      try {
-        await navigator.clipboard.writeText(SHARE_TEXT);
-      } catch {
-        // clipboard unavailable — silently ignore, sharing is a nice-to-have
-      }
-    }
+    await shareText({ text: SHARE_TEXT });
   }
 
   return (

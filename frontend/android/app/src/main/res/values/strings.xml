@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">سبزینو</string>
+    <string name="title_activity_main">سبزینو</string>
+    <string name="package_name">ir.sabzino.app</string>
+    <string name="custom_url_scheme">ir.sabzino.app</string>
+</resources>

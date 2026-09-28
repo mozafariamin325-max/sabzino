@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { Link, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuthStore } from "./store/auth";
 import { useMe } from "./api/queries";
 import { getAvailableViews, viewPath } from "./lib/roles";
@@ -7,6 +7,10 @@ import BottomNav from "./components/BottomNav";
 import Sidebar from "./components/Sidebar";
 import { CenterLoading } from "./components/ui";
 import brandmark from "./assets/brand/brandmark-256.png";
+import { initNativeShell, isNative } from "./lib/native";
+import AdminLogin from "./pages/AdminLogin";
+import GuestProfile from "./components/GuestProfile";
+import GuestImpactIntro from "./components/GuestImpactIntro";
 
 // فاز ۸ (Stitch — بهینه‌سازی عملکرد): مسیرهای پرتردد (ورود/ثبت‌نام/داشبورد
 // خانه) همچنان eager هستند تا اولین رندر معطل نشود؛ بقیهٔ صفحات — به‌خصوص
@@ -15,7 +19,6 @@ import brandmark from "./assets/brand/brandmark-256.png";
 // باندل واحد (یافتهٔ CRITICAL گزارش ممیزی) به تکه‌های کوچک‌تر و بار-تنبل
 // تقسیم شود. هیچ مسیر/رفتاری تغییر نکرده، فقط زمان بارگذاری کد جابه‌جا شده.
 import AuthScreen from "./pages/AuthScreen";
-import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import RequestWizard from "./pages/RequestWizard";
 
@@ -35,7 +38,7 @@ const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const AddressBook = lazy(() => import("./pages/AddressBook"));
 const BusinessDashboard = lazy(() => import("./pages/BusinessDashboard"));
 const Calculator = lazy(() => import("./pages/Calculator"));
-const CameraScan = lazy(() => import("./pages/CameraScan"));
+const About = lazy(() => import("./pages/About"));
 const Missions = lazy(() => import("./pages/Missions"));
 const Store = lazy(() => import("./pages/Store"));
 const GreenImpact = lazy(() => import("./pages/GreenImpact"));
@@ -51,12 +54,24 @@ import GuestGateNotice from "./components/GuestGateNotice";
  * (ثبت درخواست/کیف‌پول) — با RequireRealAccount (پیام دوستانهٔ CTA به‌جای
  * ریدایرکت خشک برای کاربر مهمان) محافظت می‌شوند.
  */
+const loggedOutTarget = () => "/login";
+
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const accessToken = useAuthStore((s) => s.accessToken);
   const isGuest = useAuthStore((s) => s.isGuest);
   const location = useLocation();
-  if (!accessToken && !isGuest) return <Navigate to="/login" replace state={{ from: location }} />;
+  if (!accessToken && !isGuest) return <Navigate to={loggedOutTarget()} replace state={{ from: location }} />;
   return <>{children}</>;
+}
+
+/** فاز ۱۹: صفحه‌ای که کاربر واردشده نسخهٔ واقعی‌اش را می‌بیند و مهمان یک نسخهٔ معرفی/دعوت به ورود. */
+function GuestOr({ guest, children }: { guest: React.ReactNode; children: React.ReactNode }) {
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const isGuest = useAuthStore((s) => s.isGuest);
+  const location = useLocation();
+  if (accessToken) return <>{children}</>;
+  if (isGuest) return <>{guest}</>;
+  return <Navigate to={loggedOutTarget()} replace state={{ from: location }} />;
 }
 
 /** رفتار قبلی RequireAuth، بدون استثنای مهمان — برای صفحاتی که واقعاً حساب واقعی لازم دارند. */
@@ -68,13 +83,15 @@ function RequireRealAuth({ children }: { children: React.ReactNode }) {
 }
 
 /** برای اقدامات واقعی که مرور مهمان کافی نیست: کاربر مهمان پیام CTA می‌بیند، کاربر کاملاً ناشناس مستقیم به /login می‌رود. */
-function RequireRealAccount({ children }: { children: React.ReactNode }) {
+function RequireRealAccount({
+  children, title, description, icon,
+}: { children: React.ReactNode; title?: string; description?: string; icon?: string }) {
   const accessToken = useAuthStore((s) => s.accessToken);
   const isGuest = useAuthStore((s) => s.isGuest);
   const location = useLocation();
   if (accessToken) return <>{children}</>;
-  if (isGuest) return <GuestGateNotice />;
-  return <Navigate to="/login" replace state={{ from: location }} />;
+  if (isGuest) return <AppLayout><GuestGateNotice title={title} description={description} icon={icon} /></AppLayout>;
+  return <Navigate to={loggedOutTarget()} replace state={{ from: location }} />;
 }
 
 /**
@@ -127,7 +144,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
       <Sidebar />
 
       <div className="md:mr-64 md:pt-16">
-        <div className="max-w-md md:max-w-3xl mx-auto md:mx-0 md:px-10 md:py-8">
+        <div className="max-w-md md:max-w-3xl mx-auto md:mx-0 md:px-10 md:py-8 pb-24 md:pb-8">
           <Suspense fallback={<CenterLoading />}>{children}</Suspense>
         </div>
       </div>
@@ -137,40 +154,107 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * فاز ۱۹: دکمهٔ Back سخت‌افزاری اندروید. اگر تاریخچه دارد یک قدم برمی‌گردد؛
+ * در صفحهٔ اصلی «دوبار Back برای خروج». در وب هیچ کاری نمی‌کند.
+ */
+function NativeBackHandler() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathRef = useRef(location.pathname);
+  const lastBackRef = useRef(0);
+  const [toast, setToast] = useState(false);
+
+  useEffect(() => {
+    pathRef.current = location.pathname;
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!isNative) return;
+    let remove: (() => void) | undefined;
+    let cancelled = false;
+    import("@capacitor/app").then(({ App: CapApp }) => {
+      CapApp.addListener("backButton", () => {
+        const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+        if (idx > 0) {
+          navigate(-1);
+          return;
+        }
+        if (pathRef.current !== "/" && pathRef.current !== "/login") {
+          navigate("/", { replace: true });
+          return;
+        }
+        const now = Date.now();
+        if (now - lastBackRef.current < 2000) {
+          CapApp.exitApp();
+          return;
+        }
+        lastBackRef.current = now;
+        setToast(true);
+        setTimeout(() => setToast(false), 2000);
+      }).then((h) => {
+        if (cancelled) h.remove();
+        else remove = () => h.remove();
+      }).catch(() => {
+        /* پلاگین در دسترس نیست (مثلاً مرورگر) — بی‌اثر */
+      });
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+      remove?.();
+    };
+  }, [navigate]);
+
+  if (!toast) return null;
+  return (
+    <div className="fixed bottom-24 inset-x-0 z-[60] flex justify-center pointer-events-none">
+      <span className="bg-ink-900/90 text-white text-xs px-4 py-2 rounded-full">برای خروج، دوباره بازگشت را بزنید</span>
+    </div>
+  );
+}
+
 export default function App() {
   const accessToken = useAuthStore((s) => s.accessToken);
   const { isLoading } = useMe(!!accessToken);
 
+  useEffect(() => {
+    initNativeShell();
+  }, []);
+
   if (accessToken && isLoading) return <CenterLoading />;
 
   return (
+    <>
+    <NativeBackHandler />
     <Routes>
+      <Route path="/admin-login" element={<AdminLogin />} />
+      <Route path="/driver-login" element={<AuthScreen variant="driver" />} />
       <Route path="/login" element={<AuthScreen />} />
-      <Route path="/register" element={<Register />} />
+      <Route path="/register" element={<Navigate to="/login" replace />} />
 
       {/* فاز ۱۵: صفحات قابل‌مرور برای مهمان (بدون ورود واقعی) */}
       <Route path="/" element={<RequireAuth><AppLayout><Dashboard /></AppLayout></RequireAuth>} />
       <Route path="/stations" element={<RequireAuth><AppLayout><Stations /></AppLayout></RequireAuth>} />
       <Route path="/calculator" element={<RequireAuth><AppLayout><Calculator /></AppLayout></RequireAuth>} />
       <Route path="/materials" element={<RequireAuth><AppLayout><Materials /></AppLayout></RequireAuth>} />
+      <Route path="/marketplace" element={<RequireAuth><AppLayout><Marketplace /></AppLayout></RequireAuth>} />
+      <Route path="/store" element={<RequireAuth><AppLayout><Store /></AppLayout></RequireAuth>} />
+      <Route path="/leaderboard" element={<RequireAuth><AppLayout><Leaderboard /></AppLayout></RequireAuth>} />
+      <Route path="/about" element={<RequireAuth><AppLayout><About /></AppLayout></RequireAuth>} />
+      <Route path="/missions" element={<RequireAuth><AppLayout><Missions /></AppLayout></RequireAuth>} />
+      <Route path="/green-impact" element={<GuestOr guest={<AppLayout><GuestImpactIntro /></AppLayout>}><AppLayout><GreenImpact /></AppLayout></GuestOr>} />
+      <Route path="/profile" element={<GuestOr guest={<AppLayout><GuestProfile /></AppLayout>}><AppLayout><Profile /></AppLayout></GuestOr>} />
       <Route path="/green-impact/projects" element={<RequireAuth><AppLayout><ImpactProjects /></AppLayout></RequireAuth>} />
       <Route path="/green-impact/projects/:uid" element={<RequireAuth><AppLayout><ImpactProjectDetail /></AppLayout></RequireAuth>} />
 
       {/* فاز ۱۵: اقدامات واقعی — کاربر مهمان به‌جای ریدایرکت، پیام CTA می‌بیند */}
-      <Route path="/requests/new" element={<RequireRealAccount><AppLayout><RequestWizard /></AppLayout></RequireRealAccount>} />
-      <Route path="/wallet" element={<RequireRealAccount><AppLayout><WalletPage /></AppLayout></RequireRealAccount>} />
+      <Route path="/requests/new" element={<RequireAuth><AppLayout><RequestWizard /></AppLayout></RequireAuth>} />
+      <Route path="/wallet" element={<RequireRealAccount icon="💰" title="کیف‌پول سبزینو" description="با ورود، موجودی، تراکنش‌ها و برداشت وجهت را اینجا مدیریت می‌کنی."><AppLayout><WalletPage /></AppLayout></RequireRealAccount>} />
 
       {/* بقیهٔ صفحات: مثل قبل، فقط حساب واقعی */}
-      <Route path="/requests" element={<RequireRealAuth><AppLayout><RequestsList /></AppLayout></RequireRealAuth>} />
+      <Route path="/requests" element={<RequireRealAccount icon="📋" title="درخواست‌هایت اینجا نمایش داده می‌شود" description="بعد از ورود، وضعیت همهٔ درخواست‌های تحویل زباله‌ات را می‌بینی."><AppLayout><RequestsList /></AppLayout></RequireRealAccount>} />
       <Route path="/requests/:uid" element={<RequireRealAuth><AppLayout><RequestDetail /></AppLayout></RequireRealAuth>} />
-      <Route path="/profile" element={<RequireRealAuth><AppLayout><Profile /></AppLayout></RequireRealAuth>} />
-      <Route path="/marketplace" element={<RequireRealAuth><AppLayout><Marketplace /></AppLayout></RequireRealAuth>} />
-      <Route path="/store" element={<RequireRealAuth><AppLayout><Store /></AppLayout></RequireRealAuth>} />
-      <Route path="/notifications" element={<RequireRealAuth><AppLayout><Notifications /></AppLayout></RequireRealAuth>} />
-      <Route path="/leaderboard" element={<RequireRealAuth><AppLayout><Leaderboard /></AppLayout></RequireRealAuth>} />
-      <Route path="/scan" element={<RequireRealAuth><AppLayout><CameraScan /></AppLayout></RequireRealAuth>} />
-      <Route path="/missions" element={<RequireRealAuth><AppLayout><Missions /></AppLayout></RequireRealAuth>} />
-      <Route path="/green-impact" element={<RequireRealAuth><AppLayout><GreenImpact /></AppLayout></RequireRealAuth>} />
+      <Route path="/notifications" element={<RequireRealAccount icon="🔔" title="اعلان‌هایت اینجاست" description="بعد از ورود، اعلان پذیرش درخواست و واریز پول را اینجا می‌بینی."><AppLayout><Notifications /></AppLayout></RequireRealAccount>} />
 
       <Route path="/addresses" element={<RequireRealAuth><AppLayout><AddressBook /></AppLayout></RequireRealAuth>} />
       <Route path="/collector/register" element={<RequireRealAuth><AppLayout><CollectorRegister /></AppLayout></RequireRealAuth>} />
@@ -181,5 +265,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }

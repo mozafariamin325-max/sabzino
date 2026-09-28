@@ -11,7 +11,6 @@ export const HOME_PRICE_SLUGS: { slug: string; label: string }[] = [
   { slug: "آهن-درجه-۱", label: "آهن درجه ۱" },
   { slug: "مس-کابلی-قرمز", label: "مس کابلی قرمز" },
   { slug: "آلومینیوم-خشک", label: "آلومینیوم خشک" },
-  { slug: "برنج-زردبار", label: "برنج" },
   { slug: "کارتن-فله", label: "کارتن" },
   { slug: "کاغذ-سفید-و-فرم", label: "کاغذ سفید" },
   { slug: "PET-درجه-۱", label: "PET" },

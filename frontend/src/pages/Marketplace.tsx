@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuthStore } from "../store/auth";
 import { useListings, usePurchaseListing } from "../api/queries";
 import { Button, Card, CenterLoading, EmptyState, TopBar } from "../components/ui";
 import { formatKg, formatToman } from "../lib/format";
@@ -46,6 +48,10 @@ function ListingCard({
   onDone: () => void;
 }) {
   const purchase = usePurchaseListing();
+  // فاز ۱۹: مرور آگهی‌ها برای مهمان آزاد است؛ «درخواست خرید» ورود می‌خواهد.
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const navigate = useNavigate();
+  const location = useLocation();
   const defaultQty = Number(l.minimum_order_kg) > 0 ? l.minimum_order_kg : "1";
   const [qty, setQty] = useState(defaultQty);
   const [success, setSuccess] = useState(false);
@@ -88,8 +94,8 @@ function ListingCard({
       {l.location && <p className="text-[11px] text-ink-500 mt-0.5">📍 {l.location}</p>}
       <p className="text-sm font-bold text-brand-600 mt-1">{formatToman(l.price_per_kg)} ت/کیلو</p>
 
-      <Button variant="secondary" full className="mt-2.5 text-xs py-2" onClick={onToggle}>
-        {open ? "انصراف" : "درخواست خرید"}
+      <Button variant="secondary" full className="mt-2.5 text-xs py-2" onClick={() => (accessToken ? onToggle() : navigate("/login", { state: { from: location } }))}>
+        {open ? "انصراف" : accessToken ? "درخواست خرید" : "ورود برای خرید"}
       </Button>
 
       {open && (

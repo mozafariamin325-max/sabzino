@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { shareText } from "../lib/native";
 import { Link } from "react-router-dom";
 import {
   useGreenPoints, useMyContributions, useMyGreenImpact, useMyImpact, useMyPendingDonations, useMyRequests, useQRCode,
@@ -159,22 +160,10 @@ export default function GreenImpact() {
       `من در سبزینو ${formatKg(myImpact?.total_kg_recycled || 0)} کیلوگرم بازیافت کردم و ` +
       `${formatToman(impact.total_contributed)} تومان از ارزش پسماندم را به اثر سبز اختصاص دادم 🌱\n` +
       `سطح من: ${impact.tier.icon} ${impact.tier.name}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ text });
-        return;
-      } catch {
-        /* کاربر انصراف داد — بی‌سروصدا به کلیپ‌بورد fallback می‌کنیم */
-      }
-    }
-    if (navigator.clipboard) {
-      try {
-        await navigator.clipboard.writeText(text);
-        setShared(true);
-        setTimeout(() => setShared(false), 2500);
-      } catch {
-        /* کلیپ‌بورد در دسترس نبود — بی‌ضرر نادیده می‌گیریم */
-      }
+    const r = await shareText({ text });
+    if (r === "copied") {
+      setShared(true);
+      setTimeout(() => setShared(false), 2500);
     }
   }
 

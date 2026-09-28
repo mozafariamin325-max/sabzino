@@ -34,7 +34,6 @@ const PRIMARY_SERVICES = [
 // خدمات فرعی — چیزی از اپ حذف نشده، فقط از بنر/گرید اصلی به یک ردیف
 // کوچک‌تر و کم‌رنگ‌تر منتقل شدند تا صفحه شلوغ نباشد.
 const SECONDARY_SERVICES = [
-  { to: "/scan", label: "تشخیص با دوربین", icon: "📷" },
   { to: "/calculator", label: "محاسبه‌گر ارزش", icon: "🧮" },
   { to: "/missions", label: "ماموریت‌های سبز", icon: "🎯" },
 ];
