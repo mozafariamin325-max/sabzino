@@ -84,3 +84,39 @@ class Referral(TimeStampedModel):
     referee = models.OneToOneField("accounts.User", on_delete=models.CASCADE, related_name="referral_record")
     reward_points = models.IntegerField(default=0)
     rewarded = models.BooleanField(default=False)
+
+
+class FieldEvent(TimeStampedModel, UUIDModel):
+    """چالش میدانی (مثلاً پاکسازی آبشار): تاریخ مشخص، ظرفیت، ثبت‌نام شرکت‌کننده، جایزه و ناهار.
+    از داشبورد مدیریت ساخته و ویرایش می‌شود."""
+
+    title = models.CharField(max_length=128)
+    description = models.TextField(blank=True)
+    location_name = models.CharField(max_length=160, blank=True, help_text="مثلاً آبشار یاسوج")
+    event_date = models.DateTimeField()
+    capacity = models.PositiveIntegerField(default=40)
+    prize_text = models.CharField(max_length=200, blank=True, help_text="جایزهٔ شرکت‌کنندگان")
+    lunch_included = models.BooleanField(default=True)
+    extra_info = models.TextField(blank=True, help_text="محل تجمع، پوشش پیشنهادی و ...")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["event_date"]
+
+    def __str__(self):
+        return self.title
+
+
+class FieldEventRegistration(TimeStampedModel):
+    event = models.ForeignKey(FieldEvent, on_delete=models.CASCADE, related_name="registrations")
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="event_registrations")
+    full_name = models.CharField(max_length=200)
+    phone_number = models.CharField(max_length=15)
+    note = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        unique_together = ("event", "user")
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.full_name} → {self.event}"

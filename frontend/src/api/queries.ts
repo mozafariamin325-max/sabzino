@@ -9,7 +9,7 @@ import type {
   MaterialPrice, City, Challenge, LeaderboardRow, NeighborhoodLeaderboardRow,
   MyImpact, ClassifyResult, NearbyCollector,
   ImpactProject, ImpactContribution, MyGreenImpact, ImpactDashboard, PendingDonation,
-  AdminCollector, AdminWithdrawal,
+  AdminCollector, AdminWithdrawal, FieldEvent, EventParticipant,
   StorePartner, StoreRedemption, AdminStoreRedemption, StorePartnerCategory,
 } from "./types";
 
@@ -1017,5 +1017,78 @@ export function useImpactDashboard() {
   return useQuery({
     queryKey: ["green-impact", "admin-dashboard"],
     queryFn: async () => (await api.get<{ dashboard: ImpactDashboard }>("/green-impact/dashboard/")).data.dashboard,
+  });
+}
+
+// ---------------- FIELD EVENTS ----------------
+export function useFieldEvents(all = false) {
+  const accessToken = useAuthStore((s) => s.accessToken);
+  return useQuery({
+    queryKey: ["field-events", all, !!accessToken],
+    queryFn: async () => (await api.get<FieldEvent[]>("/rewards/events/", { params: all ? { all: 1 } : {} })).data,
+  });
+}
+
+export function useRegisterFieldEvent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: { uid: string; cancel?: boolean; note?: string }) =>
+      (p.cancel
+        ? await api.delete(`/rewards/events/${p.uid}/register/`)
+        : await api.post(`/rewards/events/${p.uid}/register/`, { note: p.note ?? "" })
+      ).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["field-events"] }),
+  });
+}
+
+export function useSaveFieldEvent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: { uid?: string; body: Record<string, unknown> }) =>
+      p.uid ? (await api.patch(`/rewards/events/${p.uid}/`, p.body)).data : (await api.post("/rewards/events/", p.body)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["field-events"] }),
+  });
+}
+
+export function useDeleteFieldEvent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (uid: string) => (await api.delete(`/rewards/events/${uid}/`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["field-events"] }),
+  });
+}
+
+export function useEventParticipants(uid: string | null) {
+  return useQuery({
+    queryKey: ["event-participants", uid],
+    enabled: !!uid,
+    queryFn: async () => (await api.get<{ participants: EventParticipant[] }>(`/rewards/events/${uid}/participants/`)).data.participants,
+  });
+}
+
+export function useAdminChallenges() {
+  return useQuery({
+    queryKey: ["challenges", "admin"],
+    queryFn: async () => {
+      const { data } = await api.get<Paginated<Challenge> | Challenge[]>("/rewards/challenges/", { params: { all: 1 } });
+      return Array.isArray(data) ? data : data.results;
+    },
+  });
+}
+
+export function useSaveChallenge() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (p: { id?: number; body: Record<string, unknown> }) =>
+      p.id ? (await api.patch(`/rewards/challenges/${p.id}/`, p.body)).data : (await api.post("/rewards/challenges/", p.body)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["challenges"] }),
+  });
+}
+
+export function useDeleteChallenge() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => (await api.delete(`/rewards/challenges/${id}/`)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["challenges"] }),
   });
 }

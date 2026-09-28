@@ -1,10 +1,13 @@
+from django.db import transaction
+from django.utils import timezone
 from rest_framework import views, generics, viewsets, permissions
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import Challenge
+from .models import Challenge, FieldEvent, FieldEventRegistration
 from .services import ensure_points_account
 from .serializers import (
     GreenPointAccountSerializer, GreenPointTransactionSerializer, ChallengeSerializer,
-    UserBadgeSerializer,
+    UserBadgeSerializer, FieldEventSerializer, FieldEventRegistrationSerializer,
 )
 
 
@@ -29,10 +32,72 @@ class MyBadgesView(generics.ListAPIView):
         return self.request.user.badges.select_related("badge")
 
 
-class ChallengeViewSet(viewsets.ReadOnlyModelViewSet):
+class ChallengeViewSet(viewsets.ModelViewSet):
+    """ماموریت‌های امتیازی: خواندن برای همه، ساخت/ویرایش/حذف فقط مدیر (از داشبورد)."""
+
     queryset = Challenge.objects.filter(is_active=True)
     serializer_class = ChallengeSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        return [permissions.AllowAny()] if self.request.method in permissions.SAFE_METHODS else [permissions.IsAdminUser()]
+
+    def get_queryset(self):
+        u = self.request.user
+        if u.is_authenticated and u.is_staff and (self.request.query_params.get("all") or self.request.method not in permissions.SAFE_METHODS):
+            return Challenge.objects.all().order_by("-id")
+        return super().get_queryset()
+
+
+class FieldEventViewSet(viewsets.ModelViewSet):
+    """چالش‌های میدانی: فهرست عمومی، ثبت‌نام کاربر واردشده، مدیریت و فهرست شرکت‌کنندگان برای مدیر."""
+
+    queryset = FieldEvent.objects.filter(is_active=True)
+    serializer_class = FieldEventSerializer
+    lookup_field = "uid"
+    pagination_class = None
+
+    def get_permissions(self):
+        if self.action == "register":
+            return [permissions.IsAuthenticated()]
+        if self.request.method in permissions.SAFE_METHODS and self.action != "participants":
+            return [permissions.AllowAny()]
+        return [permissions.IsAdminUser()]
+
+    def get_queryset(self):
+        u = self.request.user
+        staff = u.is_authenticated and u.is_staff
+        if staff and (self.request.query_params.get("all") or self.request.method not in permissions.SAFE_METHODS or self.action == "participants"):
+            return FieldEvent.objects.all()
+        # عموم: فقط چالش‌های فعال و پیش‌رو
+        return FieldEvent.objects.filter(is_active=True, event_date__gte=timezone.now())
+
+    @action(detail=True, methods=["post", "delete"], url_path="register")
+    def register(self, request, uid=None):
+        with transaction.atomic():
+            event = FieldEvent.objects.select_for_update().filter(uid=uid, is_active=True).first()
+            if not event or event.event_date < timezone.now():
+                return Response({"success": False, "message": "این چالش دیگر باز نیست."}, status=400)
+            existing = FieldEventRegistration.objects.filter(event=event, user=request.user)
+            if request.method == "DELETE":
+                existing.delete()
+            elif not existing.exists():
+                if event.registrations.count() >= event.capacity:
+                    return Response({"success": False, "message": "ظرفیت این چالش تکمیل شده است."}, status=400)
+                u = request.user
+                full_name = f"{u.first_name} {u.last_name}".strip() or u.username
+                FieldEventRegistration.objects.create(
+                    event=event, user=u, full_name=full_name, phone_number=u.phone_number or "",
+                    note=str(request.data.get("note", ""))[:200],
+                )
+        return Response({"success": True, "event": FieldEventSerializer(event, context={"request": request}).data})
+
+    @action(detail=True, methods=["get"], url_path="participants")
+    def participants(self, request, uid=None):
+        event = self.get_object()
+        return Response({
+            "success": True,
+            "participants": FieldEventRegistrationSerializer(event.registrations.all(), many=True).data,
+        })
 
 
 class LeaderboardView(views.APIView):

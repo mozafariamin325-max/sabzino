@@ -634,3 +634,27 @@ export const STATUS_LABELS: Record<string, string> = {
   COMPLETED: "تکمیل شده",
   CANCELLED: "لغو شده",
 };
+
+// ---------------- FIELD EVENTS (چالش‌های میدانی) ----------------
+export interface FieldEvent {
+  uid: string;
+  title: string;
+  description: string;
+  location_name: string;
+  event_date: string;
+  capacity: number;
+  prize_text: string;
+  lunch_included: boolean;
+  extra_info: string;
+  is_active: boolean;
+  registered_count: number;
+  spots_left: number;
+  is_registered: boolean;
+}
+
+export interface EventParticipant {
+  full_name: string;
+  phone_number: string;
+  note: string;
+  created_at: string;
+}

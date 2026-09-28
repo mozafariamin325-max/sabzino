@@ -19,7 +19,7 @@ class Command(BaseCommand):
         self.stdout.write("پروژه‌های اثر سبز به‌روز شد.")
         seeder.cleanup_demo_data()
         self.stdout.write("داده نمونه از دید کاربر برداشته شد؛ شهر کاربران روی شهر راه‌اندازی‌شده تنظیم شد.")
-        for hook in ("sync_yasuj_stations", "sync_challenges"):
+        for hook in ("sync_yasuj_stations", "sync_events"):
             fn = getattr(seeder, hook, None)
             if fn:
                 fn()

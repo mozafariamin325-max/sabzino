@@ -816,6 +816,28 @@ class Command(BaseCommand):
             st.save()
             st.accepted_materials.set(active_materials)
 
+    def sync_events(self):
+        """سه چالش میدانی اولیه. تاریخ‌ها فقط پیشنهادی‌اند (۳۰/۴۵/۶۰ روز بعد)؛ مدیر از داشبورد
+        تاریخ، ظرفیت و جایزه را نهایی می‌کند. اگر چالشی با همین عنوان هست، دست نمی‌خورد."""
+        from rewards.models import FieldEvent
+
+        now = timezone.now().replace(hour=9, minute=0, second=0, microsecond=0)
+        items = [
+            ("پاکسازی آبشار یاسوج", "آبشار یاسوج", 30),
+            ("پاکسازی تنگ تامرادی", "تنگ تامرادی", 45),
+            ("پاکسازی ورودی یاسوج", "ورودی شهر یاسوج", 60),
+        ]
+        for title, place, days in items:
+            FieldEvent.objects.get_or_create(
+                title=title,
+                defaults={
+                    "description": f"با هم {place} را از زباله پاک می‌کنیم. ثبت‌نام کن تا به تیم بپیوندی؛ ناهار مهمان سبزینو است و به شرکت‌کنندگان جایزه می‌دهیم.",
+                    "location_name": place, "event_date": now + timedelta(days=days), "capacity": 40,
+                    "prize_text": "جایزه برای شرکت‌کنندگان (جزئیات به‌زودی اعلام می‌شود)", "lunch_included": True,
+                    "extra_info": "ساعت و محل دقیق تجمع پس از ثبت‌نام از طریق اپ اعلام می‌شود.",
+                },
+            )
+
     def cleanup_demo_data(self):
         """داده نمونه را از دید کاربر واقعی برمی‌دارد (حذف نمی‌کند): جمع‌آورهای نمونه آفلاین،
         کاربران نمونهٔ غیرمدیر غیرفعال، و شهر همهٔ کاربران به شهر راه‌اندازی‌شده."""

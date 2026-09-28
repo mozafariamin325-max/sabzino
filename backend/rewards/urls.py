@@ -2,11 +2,12 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 from .views import (
     MyPointsView, MyPointTransactionsView, MyBadgesView, ChallengeViewSet, LeaderboardView,
-    NeighborhoodLeaderboardView,
+    NeighborhoodLeaderboardView, FieldEventViewSet,
 )
 
 router = DefaultRouter()
 router.register("challenges", ChallengeViewSet, basename="challenge")
+router.register("events", FieldEventViewSet, basename="field-event")
 
 urlpatterns = [
     path("points/me/", MyPointsView.as_view(), name="points-me"),

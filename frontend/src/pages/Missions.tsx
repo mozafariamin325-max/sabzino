@@ -1,4 +1,5 @@
-import { useChallenges } from "../api/queries";
+import { useChallenges, useFieldEvents } from "../api/queries";
+import FieldEventCard from "../components/FieldEventCard";
 import type { Challenge } from "../api/types";
 import { Card, CenterLoading, DemoBadge, EmptyState, TopBar } from "../components/ui";
 import { formatNumber } from "../lib/format";
@@ -116,6 +117,7 @@ function SectionHeader({ icon, title, count }: { icon: string; title: string; co
 
 export default function Missions() {
   const { data, isLoading } = useChallenges();
+  const { data: events } = useFieldEvents();
   const activeChallenges = (data || []).filter((c) => c.is_active);
 
   // Note: the API always returns a synthesized {progress_value: 0, completed: false}
@@ -131,6 +133,15 @@ export default function Missions() {
   return (
     <div>
       <TopBar title="ماموریت‌های سبز" subtitle="با هر تحویل، یک قدم به جایزه بعدی نزدیک‌تر شو" right={<DemoBadge />} />
+
+      {!!events?.length && (
+        <div className="px-4 mb-5">
+          <p className="text-sm font-bold text-ink-900 mb-2">🏞️ چالش‌های میدانی — با هم شهر را پاک می‌کنیم</p>
+          <div className="flex flex-col gap-3">
+            {events.map((e) => <FieldEventCard key={e.uid} event={e} />)}
+          </div>
+        </div>
+      )}
 
       <div className="px-4">
         {!isLoading && activeChallenges.length > 0 && (

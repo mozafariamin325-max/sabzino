@@ -10,13 +10,15 @@ import { api } from "../api/client";
 import { useAuthStore } from "../store/auth";
 import {
   downloadAdminExport, useAdminCharts, useDecideVerification, useGlobalSearch, useVerificationCenter,
-  useAdminPricing, useSetPrice, useAllCities, useUpdateCity, useChallenges, useListings, useAdminPurchaseRequests,
+  useAdminPricing, useSetPrice, useAllCities, useUpdateCity, useListings, useAdminPurchaseRequests,
   useImpactDashboard, useImpactProjects, useCreateImpactProject, useUpdateImpactProject,
   useAdminCollectors, useSuspendCollector, useReactivateCollector,
   useAdminWithdrawals, useDecideWithdrawal,
   useAdminRequests, useAdminEditRequest, useAdminCancelRequest, useAdminOverrideWeighing,
   useAdminStorePartners, useCreateStorePartner, useUpdateStorePartner, useAdminStoreRedemptions, useDecideStoreRedemption,
   useStations, useNearbyCollectorsMap,
+  useFieldEvents, useSaveFieldEvent, useDeleteFieldEvent, useEventParticipants,
+  useAdminChallenges, useSaveChallenge, useDeleteChallenge,
 } from "../api/queries";
 import { Button, Card, CenterLoading, EmptyState, TopBar } from "../components/ui";
 import { formatKg, formatNumber, formatToman, toJalali } from "../lib/format";
@@ -330,7 +332,7 @@ function StationsTab() {
           <p className="text-sm font-bold text-ink-900">مراکز بازیافت</p>
           <p className="text-[11px] text-ink-500 mt-0.5 leading-5">مراکز فعال روی نقشهٔ شهروندان نمایش داده می‌شوند.</p>
         </div>
-        {!form && <Button onClick={() => setForm({ ...NEW_STATION })}>+ مرکز جدید</Button>}
+        {!form && <Button className="shrink-0 whitespace-nowrap" onClick={() => setForm({ ...NEW_STATION })}>+ مرکز جدید</Button>}
       </Card>
 
       {form && (
@@ -507,41 +509,299 @@ function PricesTab() {
   );
 }
 
+const inputCls = "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm";
+
+// تاریخ ISO سرور ↔ مقدار input از نوع datetime-local (زمان محلی)
+const toLocalInput = (iso: string) => {
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const fromLocalInput = (v: string) => new Date(v).toISOString();
+
+/** بخش «ماموریت‌ها و چالش‌ها»: دو زیربخش — چالش‌های میدانی (با ثبت‌نام) و ماموریت‌های امتیازی. */
 function MissionsTab() {
-  const { data, isLoading } = useChallenges();
-  if (isLoading) return <CenterLoading />;
-  if (!data?.length) return <EmptyState icon="🎯" title="هنوز ماموریتی ثبت نشده" />;
-
-  const TYPE_LABELS: Record<string, string> = {
-    WEIGHT: "بر اساس وزن", TRANSACTIONS: "بر اساس تعداد تراکنش", STREAK: "بر اساس پیوستگی",
-    REFERRAL: "بر اساس دعوت", NEIGHBORHOOD: "بر اساس محله",
-  };
-
+  const [sub, setSub] = useState<"events" | "points">("events");
   return (
     <div className="flex flex-col gap-3 pb-6">
-      <Card className="p-4">
-        <p className="text-sm font-bold text-ink-900 mb-1">ماموریت‌های سبز فعال</p>
-        <p className="text-[11px] text-ink-500 leading-5">
-          ساخت و ویرایش ماموریت جدید از پنل ادمین جنگو (مدل Challenge) انجام می‌شود؛ این‌جا فقط نمای زنده‌ی ماموریت‌های در حال اجراست.
-        </p>
+      <div className="grid grid-cols-2 gap-2 bg-slate-100 rounded-2xl p-1">
+        {([["events", "🏞️ چالش‌های میدانی"], ["points", "🎯 ماموریت‌های امتیازی"]] as const).map(([k, l]) => (
+          <button key={k} onClick={() => setSub(k)}
+            className={`rounded-xl py-2 text-xs font-bold ${sub === k ? "bg-white text-primary shadow" : "text-ink-500"}`}>{l}</button>
+        ))}
+      </div>
+      {sub === "events" ? <FieldEventsAdmin /> : <PointChallengesAdmin />}
+    </div>
+  );
+}
+
+interface EventForm {
+  uid?: string; title: string; description: string; location_name: string; event_date: string;
+  capacity: string; prize_text: string; lunch_included: boolean; extra_info: string; is_active: boolean;
+}
+const blankEvent = (): EventForm => ({
+  title: "", description: "", location_name: "", event_date: "", capacity: "40",
+  prize_text: "", lunch_included: true, extra_info: "", is_active: true,
+});
+
+function FieldEventsAdmin() {
+  const { data, isLoading } = useFieldEvents(true);
+  const save = useSaveFieldEvent();
+  const del = useDeleteFieldEvent();
+  const [form, setForm] = useState<EventForm | null>(null);
+  const [showFor, setShowFor] = useState<string | null>(null);
+  const { data: people, isLoading: loadingPeople } = useEventParticipants(showFor);
+
+  async function submit() {
+    if (!form) return;
+    await save.mutateAsync({
+      uid: form.uid,
+      body: {
+        title: form.title.trim(), description: form.description.trim(), location_name: form.location_name.trim(),
+        event_date: fromLocalInput(form.event_date), capacity: Number(form.capacity) || 1,
+        prize_text: form.prize_text.trim(), lunch_included: form.lunch_included,
+        extra_info: form.extra_info.trim(), is_active: form.is_active,
+      },
+    });
+    setForm(null);
+  }
+
+  function copyList() {
+    const text = (people || []).map((p, i) => `${i + 1}. ${p.full_name} — ${p.phone_number}${p.note ? ` (${p.note})` : ""}`).join("\n");
+    navigator.clipboard?.writeText(text).catch(() => {});
+  }
+
+  return (
+    <>
+      <Card className="p-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-ink-900">چالش‌های میدانی</p>
+          <p className="text-[11px] text-ink-500 mt-0.5 leading-5">
+            مثل پاکسازی آبشار: تاریخ، ظرفیت، جایزه و ناهار را تعیین کن؛ کاربران داخل اپ ثبت‌نام می‌کنند و فهرستشان همین‌جاست.
+          </p>
+        </div>
+        {!form && <Button className="shrink-0 whitespace-nowrap" onClick={() => setForm(blankEvent())}>+ چالش جدید</Button>}
       </Card>
-      {data.map((c) => (
-        <Card key={c.id} className="p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-bold text-ink-900">{c.title}</p>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full ${c.is_active ? "bg-brand-50 text-brand-700" : "bg-slate-100 text-ink-500"}`}>
-              {c.is_active ? "فعال" : "غیرفعال"}
-            </span>
+
+      {form && (
+        <Card className="p-4 flex flex-col gap-3">
+          <p className="text-sm font-bold text-ink-900">{form.uid ? "ویرایش چالش" : "چالش جدید"}</p>
+          <input className={inputCls} placeholder="عنوان (مثلاً پاکسازی آبشار یاسوج)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          <input className={inputCls} placeholder="محل (مثلاً آبشار یاسوج)" value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} />
+          <div>
+            <label className="text-[11px] text-ink-500 mb-1 block">تاریخ و ساعت برگزاری</label>
+            <input className={inputCls} type="datetime-local" dir="ltr" value={form.event_date} onChange={(e) => setForm({ ...form, event_date: e.target.value })} />
           </div>
-          {c.description && <p className="text-xs text-ink-500 mt-1">{c.description}</p>}
-          <div className="flex items-center gap-3 mt-2 text-[11px] text-ink-500">
-            <span>{TYPE_LABELS[c.type] || c.type}</span>
-            <span>هدف: {formatNumber(c.target_value)}</span>
-            <span className="text-brand-600 font-medium">🌿 {formatNumber(c.reward_points)} امتیاز</span>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] text-ink-500 mb-1 block">ظرفیت (نفر)</label>
+              <input className={inputCls} inputMode="numeric" dir="ltr" value={form.capacity}
+                onChange={(e) => setForm({ ...form, capacity: e.target.value.replace(/\D/g, "").slice(0, 4) })} />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-ink-700 mt-5">
+              <input type="checkbox" checked={form.lunch_included} onChange={(e) => setForm({ ...form, lunch_included: e.target.checked })} />
+              ناهار مهمان ما
+            </label>
+          </div>
+          <input className={inputCls} placeholder="جایزه (مثلاً هدیه نقدی/کالا برای نفرات برتر)" value={form.prize_text} onChange={(e) => setForm({ ...form, prize_text: e.target.value })} />
+          <textarea className={inputCls} rows={3} placeholder="توضیح چالش" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <textarea className={inputCls} rows={2} placeholder="اطلاعات بیشتر (محل تجمع، پوشش، ساعت حرکت ...)" value={form.extra_info} onChange={(e) => setForm({ ...form, extra_info: e.target.value })} />
+          <label className="flex items-center gap-2 text-xs text-ink-700">
+            <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
+            فعال (برای کاربران نمایش داده شود)
+          </label>
+          {save.error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{(save.error as Error).message}</p>}
+          <div className="flex gap-2">
+            <Button full loading={save.isPending} disabled={!form.title.trim() || !form.event_date} onClick={submit}>ذخیره</Button>
+            <Button variant="secondary" onClick={() => { setForm(null); save.reset(); }}>انصراف</Button>
           </div>
         </Card>
-      ))}
-    </div>
+      )}
+
+      {isLoading ? <CenterLoading /> : !data?.length ? <EmptyState icon="🏞️" title="هنوز چالشی ثبت نشده" /> : (
+        <div className="flex flex-col gap-2.5">
+          {data.map((e) => (
+            <Card key={e.uid} className={`p-4 ${e.is_active ? "" : "opacity-60"}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-ink-900">{e.title}</p>
+                  <p className="text-[11px] text-ink-500 mt-0.5">📍 {e.location_name || "—"} · 📅 {toJalali(e.event_date)}</p>
+                  <p className="text-[11px] text-ink-500 mt-0.5">
+                    👥 {formatNumber(e.registered_count)} از {formatNumber(e.capacity)} نفر{e.lunch_included ? " · 🍽️ ناهار" : ""}{e.prize_text ? " · 🎁" : ""}
+                  </p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${e.is_active ? "bg-green-100 text-green-700" : "bg-slate-100 text-ink-500"}`}>
+                  {e.is_active ? "فعال" : "غیرفعال"}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <button className="text-[11px] px-3 py-1.5 rounded-lg bg-brand-50 text-brand-700" onClick={() => setShowFor(showFor === e.uid ? null : e.uid)}>
+                  {showFor === e.uid ? "بستن فهرست" : "شرکت‌کنندگان"}
+                </button>
+                <button className="text-[11px] px-3 py-1.5 rounded-lg border border-slate-200 text-ink-700"
+                  onClick={() => setForm({
+                    uid: e.uid, title: e.title, description: e.description, location_name: e.location_name,
+                    event_date: toLocalInput(e.event_date), capacity: String(e.capacity), prize_text: e.prize_text,
+                    lunch_included: e.lunch_included, extra_info: e.extra_info, is_active: e.is_active,
+                  })}>ویرایش</button>
+                <button className="text-[11px] px-3 py-1.5 rounded-lg border border-slate-200 text-ink-700"
+                  onClick={() => save.mutate({ uid: e.uid, body: { is_active: !e.is_active } })}>
+                  {e.is_active ? "غیرفعال‌کردن" : "فعال‌کردن"}
+                </button>
+                <button className="text-[11px] px-3 py-1.5 rounded-lg bg-red-50 text-red-700" disabled={del.isPending}
+                  onClick={() => { if (window.confirm(`«${e.title}» و فهرست ثبت‌نام‌هایش حذف شود؟`)) del.mutate(e.uid); }}>حذف</button>
+              </div>
+              {showFor === e.uid && (
+                <div className="mt-3 border-t border-slate-100 pt-3">
+                  {loadingPeople ? <CenterLoading /> : !people?.length ? (
+                    <p className="text-xs text-ink-500">هنوز کسی ثبت‌نام نکرده.</p>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-bold text-ink-700">{formatNumber(people.length)} نفر</p>
+                        <button className="text-[11px] text-primary" onClick={copyList}>کپی فهرست</button>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        {people.map((p, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs bg-slate-50 rounded-lg px-3 py-2">
+                            <span className="text-ink-800">{formatNumber(i + 1)}. {p.full_name}{p.note ? ` — ${p.note}` : ""}</span>
+                            <span className="text-ink-500" dir="ltr">{p.phone_number}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+const CHALLENGE_TYPES: Record<string, string> = {
+  WEIGHT: "بر اساس وزن پسماند", TRANSACTIONS: "بر اساس تعداد تحویل", STREAK: "بر اساس پیوستگی",
+  REFERRAL: "بر اساس دعوت دوستان", NEIGHBORHOOD: "بر اساس محله",
+};
+interface ChallengeForm {
+  id?: number; title: string; description: string; type: string; target_value: string;
+  reward_points: string; start_at: string; end_at: string; is_active: boolean;
+}
+
+function PointChallengesAdmin() {
+  const { data, isLoading } = useAdminChallenges();
+  const save = useSaveChallenge();
+  const del = useDeleteChallenge();
+  const [form, setForm] = useState<ChallengeForm | null>(null);
+
+  const blank = (): ChallengeForm => {
+    const now = new Date();
+    return {
+      title: "", description: "", type: "WEIGHT", target_value: "50", reward_points: "100",
+      start_at: toLocalInput(now.toISOString()), end_at: toLocalInput(new Date(now.getTime() + 30 * 864e5).toISOString()), is_active: true,
+    };
+  };
+
+  async function submit() {
+    if (!form) return;
+    await save.mutateAsync({
+      id: form.id,
+      body: {
+        title: form.title.trim(), description: form.description.trim(), type: form.type,
+        target_value: form.target_value || "0", reward_points: Number(form.reward_points) || 0,
+        start_at: fromLocalInput(form.start_at), end_at: fromLocalInput(form.end_at), is_active: form.is_active,
+      },
+    });
+    setForm(null);
+  }
+
+  return (
+    <>
+      <Card className="p-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-ink-900">ماموریت‌های امتیازی</p>
+          <p className="text-[11px] text-ink-500 mt-0.5 leading-5">هدف و امتیاز را تعیین کن؛ پیشرفت هر کاربر خودکار حساب می‌شود.</p>
+        </div>
+        {!form && <Button className="shrink-0 whitespace-nowrap" onClick={() => setForm(blank())}>+ ماموریت جدید</Button>}
+      </Card>
+
+      {form && (
+        <Card className="p-4 flex flex-col gap-3">
+          <p className="text-sm font-bold text-ink-900">{form.id ? "ویرایش ماموریت" : "ماموریت جدید"}</p>
+          <input className={inputCls} placeholder="عنوان" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          <textarea className={inputCls} rows={2} placeholder="توضیح" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <select className={inputCls} value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+            {Object.entries(CHALLENGE_TYPES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] text-ink-500 mb-1 block">هدف (عدد)</label>
+              <input className={inputCls} inputMode="decimal" dir="ltr" value={form.target_value}
+                onChange={(e) => setForm({ ...form, target_value: e.target.value.replace(/[^\d.]/g, "").slice(0, 8) })} />
+            </div>
+            <div>
+              <label className="text-[11px] text-ink-500 mb-1 block">امتیاز جایزه</label>
+              <input className={inputCls} inputMode="numeric" dir="ltr" value={form.reward_points}
+                onChange={(e) => setForm({ ...form, reward_points: e.target.value.replace(/\D/g, "").slice(0, 6) })} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] text-ink-500 mb-1 block">شروع</label>
+              <input className={inputCls} type="datetime-local" dir="ltr" value={form.start_at} onChange={(e) => setForm({ ...form, start_at: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-[11px] text-ink-500 mb-1 block">پایان</label>
+              <input className={inputCls} type="datetime-local" dir="ltr" value={form.end_at} onChange={(e) => setForm({ ...form, end_at: e.target.value })} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-ink-700">
+            <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
+            فعال
+          </label>
+          {save.error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{(save.error as Error).message}</p>}
+          <div className="flex gap-2">
+            <Button full loading={save.isPending} disabled={!form.title.trim() || !form.start_at || !form.end_at} onClick={submit}>ذخیره</Button>
+            <Button variant="secondary" onClick={() => { setForm(null); save.reset(); }}>انصراف</Button>
+          </div>
+        </Card>
+      )}
+
+      {isLoading ? <CenterLoading /> : !data?.length ? <EmptyState icon="🎯" title="هنوز ماموریتی ثبت نشده" /> : (
+        <div className="flex flex-col gap-2.5">
+          {data.map((c) => (
+            <Card key={c.id} className={`p-4 ${c.is_active ? "" : "opacity-60"}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-ink-900">{c.title}</p>
+                  {c.description && <p className="text-xs text-ink-500 mt-1">{c.description}</p>}
+                  <p className="text-[11px] text-ink-500 mt-1">
+                    {CHALLENGE_TYPES[c.type] || c.type} · هدف {formatNumber(c.target_value)} · 🌿 {formatNumber(c.reward_points)} امتیاز
+                  </p>
+                  <p className="text-[10.5px] text-ink-400 mt-0.5">{toJalali(c.start_at)} تا {toJalali(c.end_at)}</p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${c.is_active ? "bg-green-100 text-green-700" : "bg-slate-100 text-ink-500"}`}>
+                  {c.is_active ? "فعال" : "غیرفعال"}
+                </span>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button className="text-[11px] px-3 py-1.5 rounded-lg border border-slate-200 text-ink-700"
+                  onClick={() => setForm({
+                    id: c.id, title: c.title, description: c.description, type: c.type, target_value: String(Number(c.target_value)),
+                    reward_points: String(c.reward_points), start_at: toLocalInput(c.start_at), end_at: toLocalInput(c.end_at), is_active: c.is_active,
+                  })}>ویرایش</button>
+                <button className="text-[11px] px-3 py-1.5 rounded-lg border border-slate-200 text-ink-700"
+                  onClick={() => save.mutate({ id: c.id, body: { is_active: !c.is_active } })}>{c.is_active ? "غیرفعال‌کردن" : "فعال‌کردن"}</button>
+                <button className="text-[11px] px-3 py-1.5 rounded-lg bg-red-50 text-red-700" disabled={del.isPending}
+                  onClick={() => { if (window.confirm(`«${c.title}» حذف شود؟`)) del.mutate(c.id); }}>حذف</button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
